@@ -15,12 +15,24 @@ namespace bt {
     template<typename Key, typename Value, typename Index, size_t Order>
     class btree_leaf_node;
 
-    template<typename Key, typename Value, typename Index, size_t Order, typename Derived>
+    template<typename Key, typename Value, typename Index, size_t Order>
     struct btree_node_visitor {
-        void visit(this Derived* self, btree_internal_node<Key, Value, Index, Order>& internal_node) {
+        void visit(this auto *self, btree_internal_node<Key, Value, Index, Order> &internal_node) {
             self->visit_internal(internal_node);
         }
-        void visit(this Derived* self, btree_leaf_node<Key, Value, Index, Order>& leaf_node) {
+
+        void visit(this auto *self, btree_leaf_node<Key, Value, Index, Order> &leaf_node) {
+            self->visit_leaf(leaf_node);
+        }
+    };
+
+    template<typename Key, typename Value, typename Index, size_t Order>
+    struct btree_node_select_visitor {
+        Index visit(this auto *self, btree_internal_node<Key, Value, Index, Order> &internal_node) {
+            self->visit_internal(internal_node);
+        }
+
+        Index visit(this auto *self, btree_leaf_node<Key, Value, Index, Order> &leaf_node) {
             self->visit_leaf(leaf_node);
         }
     };
@@ -40,7 +52,8 @@ namespace bt {
         using value_type = Value;
         using index_type = Index;
         using btree_type = btree<Key, Value, Index, Order>;
-        template<typename Derived_visitor> using visitor_type = btree_node_visitor<Key, Value, Index, Order, Derived_visitor>;
+        using visitor_type = btree_node_visitor<Key, Value, Index, Order>;
+        using select_visitor_type = btree_node_select_visitor<Key, Value, Index, Order>;
 
         static constexpr index_type INVALID_INDEX = std::numeric_limits<index_type>::max();
         static constexpr size_t O{Order};
@@ -53,13 +66,16 @@ namespace bt {
 
         [[nodiscard]] const index_type &index() const { return index_; }
 
-        size_t size(this Derived const& self) { return self.size_; }
+        size_t size(this Derived const &self) { return self.size_; }
 
         // auto keys(this Derived const *self) { return std::span(self->keys, self->size_); }
-        auto keys(this derived_type& self) { return std::span(self.keys_.data(), self.size_); }
+        auto keys(this derived_type &self) { return std::span(self.keys_.data(), self.size_); }
 
-        template<typename Derived_visitor>
-        auto accept(this derived_type* self, visitor_type<Derived_visitor>& visitor) -> void {
+        auto accept(this derived_type *self, visitor_type &visitor) -> void {
+            visitor.visit(*self);
+        }
+
+        auto accept(this derived_type *self, select_visitor_type &visitor) -> void {
             visitor.visit(*self);
         }
 
@@ -120,7 +136,7 @@ namespace bt {
         auto values() const { return std::span(values_.data(), size_); }
 
         decltype(auto) operator[](index_type index) {
-            return std::tie(keys_[index], values_ [index]);
+            return std::tie(keys_[index], values_[index]);
         }
 
     protected:
@@ -159,9 +175,8 @@ namespace bt {
 
     protected:
     private:
-        std::vector<std::variant<internal_node_type, leaf_node_type>> internal_nodes_;
-        index_type root_index_{INVALID_INDEX};
-
+        std::vector<std::variant<internal_node_type, leaf_node_type> > nodes_{leaf_node_type{}};
+        index_type root_index_{0};
     };
 } // namespace btree
 
