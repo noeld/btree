@@ -63,6 +63,12 @@ struct TestClass {
         return value_ <=> other.value_;
     }
 
+    explicit operator std::string() const { return std::format("TC[{}]", value_); }
+
+    friend std::ostream& operator<<(std::ostream& out, TestClass const & t) {
+        return out << t.operator std::string();
+    }
+
     unsigned value_ { value_counter_++ };
     static unsigned value_counter_;
     static unsigned ctor_counter_;
@@ -148,5 +154,12 @@ TEST_SUITE("test1") {
         CHECK_EQ(internal.keys().size(), 0);
         btree_type::leaf_node_type leaf;
         CHECK_EQ(leaf.keys().size(), 0);
+    }
+
+    TEST_CASE("insert") {
+        TestClass tc;
+        using btree_type = bt::btree<int64_t, TestClass, unsigned int, 64>;
+        btree_type tree;
+        tree.insert(1, tc);
     }
 }
