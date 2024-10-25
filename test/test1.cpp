@@ -108,6 +108,22 @@ TEST_SUITE("dyn_array") {
             CHECK_EQ(TestClass::ctor_counter_, saved_counter);
         }
     }
+    TEST_CASE("Compare to standard container") {
+        std::array<double, 10> test_data { 1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9, 10.1};
+        dyn_array<double, 10, uint16_t> arr;
+        std::vector<double> vec;
+        auto eq = [&arr, &vec] {
+            CHECK_EQ(arr.size(), vec.size());
+            for (size_t i = 0; i < arr.size(); ++i) {
+                CHECK_EQ(arr[i], vec[i]);
+            }
+        };
+        for(auto e : test_data) {
+            arr.push_back(e);
+            vec.push_back(e);
+            eq();
+        }
+    }
 }
 
 TEST_SUITE("test1") {

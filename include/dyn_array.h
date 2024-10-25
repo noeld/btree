@@ -28,8 +28,47 @@ namespace bt {
         typedef std::reverse_iterator<iterator> reverse_iterator;
         typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
+        dyn_array() = default;
+
+        dyn_array(const dyn_array &other)
+        {
+            for(auto const & e : other)
+                push_back_unchecked(e);
+        }
+
+        dyn_array(dyn_array &&other) {
+            for(auto&& e : other)
+                emplace_back_unchecked(std::move(e));
+        }
+
+        dyn_array(std::initializer_list<value_type> init_list) {
+            if (init_list.size() > capacity()) {
+                throw std::length_error("Initializer list size is greater than dyn_array capacity");
+            }
+            for(auto && value : init_list)
+                emplace_back_unchecked(std::move(value));
+        }
+
         ~dyn_array() noexcept {
             clear();
+        }
+
+        dyn_array & operator=(const dyn_array &other) {
+            if (this == &other)
+                return *this;
+            clear();
+            for(auto const & value : other)
+                push_back_unchecked(value);
+            return *this;
+        }
+
+        dyn_array & operator=(dyn_array &&other) noexcept {
+            if (this == &other)
+                return *this;
+            clear();
+            for(auto && value : other)
+                emplace_back_unchecked(std::move(value));
+            return *this;
         }
 
         //front
@@ -101,7 +140,8 @@ namespace bt {
             dyn_array* longer = &other;
             if (longer->size() < shorter->size())
                 std::swap(longer, shorter);
-            std::swap_ranges(longer->begin(), longer->end(), shorter->begin());
+            std::swap_ranges(shorter->begin(), shorter->end(), longer->begin());
+            std::copy(longer->begin() + shorter->size(), longer->end(), std::back_inserter(*shorter));
             std::swap(size_, other.size_);
         }
 
@@ -127,29 +167,65 @@ namespace bt {
 
         void push_back(const value_type& value) {
             assert( ("capacity exceeded", size_ < capacity()) );
-            std::construct_at(&(data()[size_]), value);
-            ++size_;
+            if (size_ >= capacity())
+                throw std::out_of_range("capacity exceeded");
+            push_back_unchecked(value);
         }
 
         void push_back(value_type&& value) {
             assert( ("capacity exceeded", size_ < capacity()) );
-            emplace_back(std::move(value));
+            if (size_ >= capacity())
+                throw std::out_of_range("capacity exceeded");
+            emplace_back_unchecked(std::move(value));
         }
 
         void emplace_back(auto && ... args) {
             assert( ("capacity exceeded", size_ < capacity()) );
+            if (size_ >= capacity())
+                throw std::out_of_range("capacity exceeded");
+            emplace_back_unchecked(std::forward<decltype(args)>(args)...);
+        }
+
+        iterator insert(iterator pos, const value_type& value) {
+            assert( ("capacity exceeded", size_ < capacity()) );
+            if (size_ >= capacity())
+                throw std::out_of_range("capacity exceeded");
+            if (pos == end())
+                push_back(value);
+            else {
+                std::construct_at(&data()[size_]);
+                std::move_backward(pos + 1, begin() + size_, begin() + size_ + 1);
+                ++size_;
+                *pos = value;
+            }
+            return pos;
+        }
+
+        iterator erase(iterator pos) {
+            if (pos + 1 != end())
+                std::move(pos + 1, end(), pos);
+            --size_;
+            std::destroy_at(&data()[size_]);
+            return pos;
+        }
+
+    protected:
+        void push_back_unchecked(const value_type& value) {
+            std::construct_at(&(data()[size_]), value);
+            ++size_;
+        }
+        void emplace_back_unchecked(auto && ... args) {
             std::construct_at(&(data()[size_]), std::forward<decltype(args)>(args)...);
             ++size_;
         }
-
         // void resize(std::size_t new_size, value_type&& value = value_type()) {
         //     assert( ("capacity exceeded", new_size < capacity()) );
         // }
 
     private:
         size_type size_ { 0 };
-        std::byte alignas(value_type) data_[Capacity * sizeof(value_type)];
-        // std::aligned_storage<sizeof(value_type), alignof(value_type)> data_[Capacity];
+        alignas(value_type) std::byte data_[Capacity * sizeof(value_type)] = {static_cast<std::byte>(0)};
+        // std::aligned_storage<sizeof(value_type), alignof(value_type)> data_[Capacity]; // deprecated in C++23
     };
 } // bt
 

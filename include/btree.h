@@ -5,6 +5,8 @@
 #ifndef BTREE_H
 #define BTREE_H
 
+#include "dyn_array.h"
+
 namespace bt {
     template<typename Key, typename Value, typename Index, size_t Order>
     class btree;
@@ -66,10 +68,10 @@ namespace bt {
 
         [[nodiscard]] const index_type &index() const { return index_; }
 
-        size_t size(this Derived const &self) { return self.size_; }
+        size_t size(this Derived const &self) { return self.keys_.size(); }
 
         // auto keys(this Derived const *self) { return std::span(self->keys, self->size_); }
-        auto keys(this derived_type &self) { return std::span(self.keys_.data(), self.size_); }
+        auto keys(this derived_type &self) { return std::span(self.keys_.data(), self.size()); }
 
         auto accept(this derived_type *self, visitor_type &visitor) -> void {
             visitor.visit(*self);
@@ -101,6 +103,7 @@ namespace bt {
         using btree_type = btree<Key, Value, Index, Order>;
 
         using base_type::INVALID_INDEX;
+        using base_type::size;
 
         static constexpr size_t O{Order}; // The order
 
@@ -111,9 +114,8 @@ namespace bt {
     private:
         friend btree_type;
         friend base_type;
-        size_t size_{0};
-        std::array<Key, Order> keys_;
-        std::array<index_type, Order + 1> child_indices_{INVALID_INDEX};
+        bt::dyn_array<Key, Order> keys_;
+        bt::dyn_array<index_type, Order + 1> child_indices_{INVALID_INDEX};
     };
 
     template<typename Key, typename Value, typename Index, size_t Order>
@@ -127,13 +129,14 @@ namespace bt {
         using btree_type = btree<Key, Value, Index, Order>;
 
         using base_type::INVALID_INDEX;
+        using base_type::size;
 
         static constexpr size_t O{Order};
 
         [[nodiscard]] static constexpr bool is_leaf() { return true; }
 
 
-        auto values() const { return std::span(values_.data(), size_); }
+        auto values() const { return std::span(values_.data(), size()); }
 
         decltype(auto) operator[](index_type index) {
             return std::tie(keys_[index], values_[index]);
@@ -146,9 +149,8 @@ namespace bt {
         friend base_type;
         index_type previous_leaf_{base_type::INVALID_INDEX};
         index_type next_leaf_{base_type::INVALID_INDEX};
-        size_t size_{0};
-        std::array<key_type, Order> keys_;
-        std::array<value_type, Order> values_;
+        bt::dyn_array<key_type, Order> keys_;
+        bt::dyn_array<value_type, Order> values_;
     };
 
     template<typename Key, typename Value, typename Index, size_t Order>
