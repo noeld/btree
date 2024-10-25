@@ -126,6 +126,8 @@ namespace bt {
 
         [[nodiscard]] bt::dyn_array<Key, Order>& keys() { return keys_; }
 
+        [[nodiscard]] dyn_array<index_type, Order + 1> child_indices() { return child_indices_; }
+
     protected:
 
     private:
@@ -159,7 +161,7 @@ namespace bt {
 
         [[nodiscard]] bt::dyn_array<Key, Order>& keys() { return keys_; }
 
-        [[nodiscard]] bt::dyn_array<Value, Order>&  values() const { return values_; }
+        [[nodiscard]] bt::dyn_array<Value, Order>&  values() { return values_; }
 
         decltype(auto) operator[](index_type index) {
             return std::tie(keys_[index], values_[index]);
@@ -267,16 +269,17 @@ namespace bt {
             return tmp;
         }
 
-        auto operator*() -> std::pair<key_type const&, value_type &> {
+        auto operator*() {
             auto& node = current_leaf();
             assert(("key index out of bounds", leaf_index_ < node.keys().size()));
             assert(("value index out of bounds", leaf_index_ < node.values().size()));
-            return std::make_pair(node.keys()[leaf_index_], node.values()[leaf_index_]);
+            return std::make_pair(
+                std::ref(node.keys()[leaf_index_]), std::ref(node.values()[leaf_index_]));
         };
 
-        auto operator->() -> std::pair<key_type const&, value_type &> {
-            return this->operator*();
-        }
+        // auto operator->() -> std::pair<key_type const&, value_type &> {
+        //     return this->operator*();
+        // }
 
     protected:
         auto current_leaf() -> leaf_node_type& {
@@ -367,6 +370,25 @@ namespace bt {
     };
 
     template<typename Key, typename Value, typename Index, size_t Order>
+    auto btree<Key, Value, Index, Order>::begin() -> iterator {
+        common_node_type* p_node = nullptr;
+        index_type next_node_index = root_index_;
+        do {
+            if (next_node_index == INVALID_INDEX) {
+                assert(("should never happen", false));
+                return end();
+            }
+            p_node = &node(next_node_index);
+            if (std::holds_alternative<internal_node_type>(*p_node)) {
+                internal_node_type& internal_node = std::get<internal_node_type>(*p_node);
+                assert(("internal_node_type must have at least one leaf child", internal_node.child_indices().size() > 0));
+                next_node_index = internal_node.child_indices()[0];
+            }
+        } while (std::holds_alternative<internal_node_type>(*p_node));
+        return iterator(*this, next_node_index);
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Order>
     auto btree<Key, Value, Index, Order>::insert(key_type const &key, value_type const &value) -> bool {
         iterator it = find_insert_position(key);
         leaf_node_type& leaf = it.current_leaf();
@@ -389,17 +411,20 @@ namespace bt {
                 return end();
             }
             common_node_type *p_node = &node(node_index);
-            std::visit([&](auto &node) {
+            auto result = std::visit([&](auto &node) -> std::variant<index_type, iterator> { // TODO: lambda must return same type for each branch!
                 auto found = std::ranges::upper_bound(node.keys(), key); // found > key
                 index_type found_index = std::distance(node.keys().begin(), found);
                 if constexpr (std::is_same_v<std::decay_t<decltype(node)>, internal_node_type>) {
                     auto previous_index =  found_index > 0 ? found_index - 1 : 0; // previous <= key
                     node_index = node.child_indices_[previous_index];
+                    return node_index;
                 } else {
                     static_assert(std::is_same_v<std::decay_t<decltype(node)>, leaf_node_type>);
                     return iterator(*this, node_index, found_index);
                 }
             }, *p_node);
+            if (std::holds_alternative<iterator>(result))
+                return std::get<iterator>(result);
         } while (true);
         return end();
     }

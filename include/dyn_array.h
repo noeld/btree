@@ -147,7 +147,6 @@ namespace bt {
 
         void fill(const value_type &value) {
             std::fill(begin(), end(), value);
-            size_ = capacity();
         }
 
         void pop_back() noexcept {
