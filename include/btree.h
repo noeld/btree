@@ -134,7 +134,7 @@ namespace bt {
         friend btree_type;
         friend base_type;
         bt::dyn_array<Key, Order> keys_;
-        bt::dyn_array<index_type, Order + 1> child_indices_{INVALID_INDEX};
+        bt::dyn_array<index_type, Order + 1> child_indices_;
     };
 
     template<typename Key, typename Value, typename Index, size_t Order>
@@ -364,7 +364,7 @@ namespace bt {
         }
         auto node(index_type const & index) -> common_node_type& {
             assert(("node index out of bounds", index < nodes_.size()));
-            if (index < nodes_.size())
+            if (index >= nodes_.size())
                 throw std::out_of_range("node index out of bounds");
             return nodes_[index];
         }
@@ -380,12 +380,20 @@ namespace bt {
 
         auto internal_node(index_type const & index) -> internal_node_type& {
             common_node_type& r_node = node(index);
-            assert(("index is not a leaf node", std::holds_alternative<leaf_node_type>(r_node)));
+            assert(("index is not an internal node", std::holds_alternative<internal_node_type>(r_node)));
             internal_node_type* p_internal = std::get_if<internal_node_type>(&r_node);
             if (p_internal == nullptr)
                 throw std::runtime_error("index does no denote a internal node");
             return *p_internal;
         }
+
+        /**
+         * @brief Create a new root node
+         * @param left_index the index of the left child node (which is the current root)
+         * @param right_index the index of the right child node
+         * @return the new root index
+         */
+        auto grow(index_type left_index, index_type right_index) -> index_type;
 
         auto create_internal_node(index_type const &parent_index = INVALID_INDEX) -> index_type;
 
@@ -440,6 +448,31 @@ namespace bt {
     }
 
     template<typename Key, typename Value, typename Index, size_t Order>
+    auto btree<Key, Value, Index, Order>::grow(index_type left_index,
+        index_type right_index) -> index_type {
+        assert(("left node ist supposed the be the old root", is_root(left_index)));
+        auto new_root_index = create_internal_node(INVALID_INDEX);
+        internal_node_type& new_root = internal_node(new_root_index);
+        new_root.child_indices().push_back(left_index);
+        new_root.child_indices().push_back(right_index);
+
+        key_type const & pivot_key = std::visit([](auto & node) -> key_type const & {
+           return node.keys().at(0);
+        }, node(right_index));
+        new_root.keys().push_back(pivot_key);
+
+        for(auto child_index : {left_index, right_index}) {
+            std::visit([new_root_index](auto & node) {
+                node.set_parent_index(new_root_index);
+            }, node(child_index));
+        }
+
+        root_index_ = new_root_index;
+
+        return new_root_index;
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Order>
     auto btree<Key, Value, Index, Order>::create_internal_node(index_type const &parent_index) -> index_type {
         auto index = nodes_.size();
         internal_node_type new_internal;
@@ -468,12 +501,12 @@ namespace bt {
                 return end();
             }
             common_node_type *p_node = &node(node_index);
-            auto result = std::visit([&](auto &node) -> std::variant<index_type, iterator> { // TODO: lambda must return same type for each branch!
+            auto result = std::visit([&](auto &node) -> std::variant<index_type, iterator> {
                 auto found = std::ranges::upper_bound(node.keys(), key); // found > key
                 index_type found_index = std::distance(node.keys().begin(), found);
                 if constexpr (std::is_same_v<std::decay_t<decltype(node)>, internal_node_type>) {
-                    auto previous_index =  found_index > 0 ? found_index - 1 : 0; // previous <= key
-                    node_index = node.child_indices_[previous_index];
+                    // auto previous_index =  found_index > 0 ? found_index - 1 : 0; // previous <= key
+                    node_index = node.child_indices_[found_index];
                     return node_index;
                 } else {
                     static_assert(std::is_same_v<std::decay_t<decltype(node)>, leaf_node_type>);
@@ -499,7 +532,7 @@ namespace bt {
 
         auto pivot_key_it = std::midpoint(p_internal->keys().begin(), p_internal->keys().end());
         auto pivot_index = std::distance(p_internal->keys().begin(), pivot_key_it);
-        auto pivot_child_indices_it = p_internal->child_indices().begin() + pivot_index;
+        auto pivot_child_indices_it = p_internal->child_indices().begin() + pivot_index + 1;
 
         // save pivot
         key_type pivot_key = *pivot_key_it;
@@ -520,7 +553,7 @@ namespace bt {
         p_insert_internal->child_indices().insert(insert_values_it, child_index);
 
         if (is_root(*p_internal)) {
-            // TODO
+            grow(node_index, new_internal_index);
         } else {
             insert_internal(p_internal->parent_index(), pivot_key, new_internal_index);
         }
@@ -530,13 +563,13 @@ namespace bt {
 
     template<typename Key, typename Value, typename Index, size_t Order>
     auto btree<Key, Value, Index, Order>::insert_internal(index_type node_index, const key_type &key,
-        index_type child_index) -> bool {
+        index_type child_index) -> bool { // TODO: debug this function
         internal_node_type& node = internal_node(node_index);
         if (node.size() < node.O) {
             auto insert_pos_it = std::upper_bound(node.keys().begin(), node.keys().end(), key);
             auto insert_pos_index = std::distance(node.keys().begin(), insert_pos_it);
             node.keys().insert(insert_pos_it, key);
-            node.child_indices().insert(node.child_indices().begin() + insert_pos_index, child_index);
+            node.child_indices().insert(node.child_indices().begin() + insert_pos_index + 1, child_index);
         } else {
             insert_split_internal(node_index, key, child_index);
         }
@@ -555,8 +588,8 @@ namespace bt {
         leaf_node_type* p_leaf = &insert_pos.current_leaf();
 
         auto pivot_key_it = std::midpoint(p_leaf->keys().begin(), p_leaf->keys().end());
-        auto pivot_value_it = std::midpoint(p_leaf->values().begin(), p_leaf->values().end());
         auto pivot_index = std::distance(p_leaf->keys().begin(), pivot_key_it);
+        auto pivot_value_it = p_leaf->values().begin() + pivot_index;
 
         // save pivot
         key_type pivot_key = *pivot_key_it;
@@ -575,8 +608,8 @@ namespace bt {
         }
 
         // shrink left node
-        p_leaf->keys().resize(pivot_index - 1);
-        p_leaf->values().resize(pivot_index - 1);
+        p_leaf->keys().resize(pivot_index);
+        p_leaf->values().resize(pivot_index);
 
         // insert key and value into one of the leaf nodes
         leaf_node_type* p_insert_leaf = (key < pivot_key) ? p_leaf : &new_leaf;
@@ -586,7 +619,7 @@ namespace bt {
         p_insert_leaf->values().insert(insert_values_it, value);
 
         if (is_root(*p_leaf)) {
-            // TODO
+            grow(p_leaf->index(), new_leaf_index);
         } else {
             // insert pivot_key into parent (internal) node
             insert_internal(p_leaf->parent_index(), pivot_key, new_leaf_index);

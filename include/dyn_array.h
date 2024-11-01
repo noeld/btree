@@ -208,7 +208,7 @@ namespace bt {
         }
 
         void resize(size_type new_size, value_type const & init = value_type()) {
-            assert( ("resize capacity exceeded", size_ < capacity()) );
+            assert( ("resize capacity exceeded", new_size <= capacity()) );
             if (new_size < size()) {
                 while(size() > new_size)
                     pop_back_unchecked();

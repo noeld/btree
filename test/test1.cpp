@@ -224,5 +224,32 @@ TEST_SUITE("test1") {
         CHECK_EQ((*tree.begin()).second, TestClass(0xabcdef10U));
     }
 
+    TEST_CASE("strictly increasing keys") {
+        using btree_type = btree<int, int, unsigned, 4>;
+        btree_type tree;
+        for (int i = 1; i < 100; ++i) {
+            tree.insert(i, i);
+        }
+        auto it = tree.begin();
+        for (int i = 1; i < 100; ++i) {
+            CHECK_EQ((*it).first, i);
+            CHECK_EQ((*it).second, i);
+            ++it;
+        }
+    }
+        TEST_CASE("random_keys with TestClass") {
+        using btree_type = btree<TestClass, std::string, unsigned, 8>;
+        btree_type tree;
+        auto randomizer = [rnd=std::mt19937{std::random_device{}()},
+            dist = std::uniform_int_distribution<unsigned>{1, 10000}]() mutable {
+            auto value = dist(rnd);
+            return std::make_tuple(TestClass(value), std::format("{}", value));
+        };
+        for (int i = 0; i < 100; ++i) {
+            auto [tc, str] = randomizer();
+            tree.insert(tc, str);
+        }
+    }
+
 
 }
