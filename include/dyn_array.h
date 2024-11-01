@@ -151,8 +151,7 @@ namespace bt {
 
         void pop_back() noexcept {
             assert(("pop_back undefined if empty", size_ > 0));
-            --size_;
-            std::destroy_at(&data()[size_]);
+            pop_back_unchecked();
         }
 
         void clear() noexcept {
@@ -208,6 +207,17 @@ namespace bt {
             return pos;
         }
 
+        void resize(size_type new_size, value_type const & init = value_type()) {
+            assert( ("resize capacity exceeded", size_ < capacity()) );
+            if (new_size < size()) {
+                while(size() > new_size)
+                    pop_back_unchecked();
+            } else if (new_size > size()) {
+                while(size() < new_size)
+                    push_back_unchecked(init);
+            }
+        }
+
     protected:
         void push_back_unchecked(const value_type& value) {
             std::construct_at(&(data()[size_]), value);
@@ -217,9 +227,10 @@ namespace bt {
             std::construct_at(&(data()[size_]), std::forward<decltype(args)>(args)...);
             ++size_;
         }
-        // void resize(std::size_t new_size, value_type&& value = value_type()) {
-        //     assert( ("capacity exceeded", new_size < capacity()) );
-        // }
+        void pop_back_unchecked() noexcept {
+            --size_;
+            std::destroy_at(&data()[size_]);
+        }
 
     private:
         size_type size_ { 0 };

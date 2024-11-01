@@ -174,6 +174,17 @@ TEST_SUITE("dyn_array") {
             eq();
         }
     }
+    TEST_CASE("resize") {
+        dyn_array<TestClass, 10, uint16_t> arr = { TestClass{5}, TestClass{6}, TestClass{7} };
+        arr.resize(1);
+        CHECK_EQ(arr.size(), 1);
+        CHECK_EQ(arr.at(0), TestClass{5});
+        arr.resize(3, TestClass{7});
+        CHECK_EQ(arr.size(), 3);
+        CHECK_EQ(arr.at(0), TestClass{5});
+        CHECK_EQ(arr.at(1), TestClass{7});
+        CHECK_EQ(arr.at(2), TestClass{7});
+    }
 }
 
 TEST_SUITE("test1") {
@@ -212,4 +223,6 @@ TEST_SUITE("test1") {
         CHECK_EQ((*tree.begin()).first, TestClass(1));
         CHECK_EQ((*tree.begin()).second, TestClass(0xabcdef10U));
     }
+
+
 }
