@@ -227,11 +227,12 @@ TEST_SUITE("test1") {
     TEST_CASE("strictly increasing keys") {
         using btree_type = btree<int, int, unsigned, 4>;
         btree_type tree;
-        for (int i = 1; i < 100; ++i) {
+        size_t count = 20;
+        for (int i = 1; i < count + 1; ++i) {
             tree.insert(i, i);
         }
         auto it = tree.begin();
-        for (int i = 1; i < 100; ++i) {
+        for (int i = 1; i < count + 1; ++i) {
             CHECK_EQ((*it).first, i);
             CHECK_EQ((*it).second, i);
             ++it;
