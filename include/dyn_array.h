@@ -192,7 +192,7 @@ namespace bt {
                 push_back(value);
             else {
                 std::construct_at(&data()[size_]);
-                std::move_backward(pos + 1, begin() + size_, begin() + size_ + 1);
+                std::move_backward(pos, begin() + size_, end() + 1);
                 ++size_;
                 *pos = value;
             }
@@ -200,6 +200,8 @@ namespace bt {
         }
 
         iterator erase(iterator pos) {
+            if (size() == 0)
+                return pos;
             if (pos + 1 != end())
                 std::move(pos + 1, end(), pos);
             --size_;

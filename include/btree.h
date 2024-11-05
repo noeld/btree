@@ -22,16 +22,14 @@ namespace bt {
     template<typename Key, typename Value, typename Index, size_t Order>
     class btree_leaf_node;
 
-    template<typename Key, typename Value, typename Index, size_t Order>
-    struct btree_node_visitor {
-        void visit(this auto *self, btree_internal_node<Key, Value, Index, Order> &internal_node) {
-            self->visit_internal(internal_node);
-        }
-
-        void visit(this auto *self, btree_leaf_node<Key, Value, Index, Order> &leaf_node) {
-            self->visit_leaf(leaf_node);
-        }
-    };
+    // template<typename Key, typename Value, typename Index, size_t Order>
+    // struct btree_node_visitor {
+    //     void visit(btree_internal_node<Key, Value, Index, Order> &internal_node) {
+    //     }
+    //
+    //     void visit(btree_leaf_node<Key, Value, Index, Order> &leaf_node) {
+    //     }
+    // };
 
     template<typename Key, typename Value, typename Index, size_t Order>
     struct btree_node_select_visitor {
@@ -58,7 +56,7 @@ namespace bt {
         using value_type = Value;
         using index_type = Index;
         using btree_type = btree<Key, Value, Index, Order>;
-        using visitor_type = btree_node_visitor<Key, Value, Index, Order>;
+        // using visitor_type = btree_node_visitor<Key, Value, Index, Order>;
         using select_visitor_type = btree_node_select_visitor<Key, Value, Index, Order>;
         using key_store_type = bt::dyn_array<Key, Order>;
 
@@ -70,12 +68,14 @@ namespace bt {
 
         static constexpr size_t order() noexcept { return Order; }
 
-        [[nodiscard]] const index_type &index() const { return index_; }
-        [[nodiscard]] const index_type &parent_index() const { return parent_index_; }
+        [[nodiscard]] const index_type &index() const noexcept { return index_; }
+        [[nodiscard]] bool has_parent() const noexcept { return parent_index() != INVALID_INDEX; }
+        [[nodiscard]] const index_type &parent_index() const noexcept { return parent_index_; }
 
-        size_t size() const { return keys_.size(); }
+        [[nodiscard]] size_t size() const { return keys_.size(); }
 
         [[nodiscard]] key_store_type& keys() { return keys_; }
+        [[nodiscard]] const key_store_type& keys() const { return keys_; }
 
         // auto accept(visitor_type &visitor) -> void {
         //     visitor.visit(this);
@@ -116,6 +116,16 @@ namespace bt {
         [[nodiscard]] static constexpr bool is_leaf() { return false; }
 
         [[nodiscard]] index_store_type& child_indices() { return child_indices_; }
+        [[nodiscard]] const index_store_type& child_indices() const { return child_indices_; }
+
+        auto accept(btree_type& tree, auto& visitor) -> void {
+            visitor(*this);
+            for (auto index: child_indices_) {
+                std::visit([&visitor, &tree](auto& node) {
+                    node.accept(tree, visitor);
+                }, tree.node(index));
+            }
+        }
 
     protected:
 
@@ -140,7 +150,12 @@ namespace bt {
 
         [[nodiscard]] static constexpr bool is_leaf() { return true; }
 
-        [[nodiscard]] value_store_type&  values() { return values_; }
+        [[nodiscard]] value_store_type& values() { return values_; }
+        [[nodiscard]] const value_store_type& values() const { return values_; }
+
+        auto accept(btree_type &tree, auto &visitor) -> void {
+            visitor(*this);
+        }
 
         decltype(auto) operator[](index_type index) {
             return std::tie(this->keys()[index], values()[index]);
@@ -195,7 +210,9 @@ namespace bt {
         static constexpr index_type INVALID_INDEX = internal_node_type::INVALID_INDEX;
 
         explicit btree_iterator(btree_type &btree, const index_type &leaf_node_index = INVALID_INDEX, const index_type &leaf_index = index_type(0))
-            : btree_(btree), leaf_node_index_(leaf_node_index), leaf_index_(leaf_index) {
+            : btree_(&btree), leaf_node_index_(leaf_node_index), leaf_index_(leaf_index) {
+            if (leaf_node_index == INVALID_INDEX)
+                set_end();
         }
 
         btree_iterator(const btree_iterator &other)
@@ -214,8 +231,8 @@ namespace bt {
         }
 
         friend bool operator==(const btree_iterator &lhs, const btree_iterator &rhs) {
-            return std::tie(&lhs.btree_, lhs.leaf_node_index_, lhs.leaf_index_)
-                == std::tie(&rhs.btree_, rhs.leaf_node_index_, rhs.leaf_index_);
+            return std::tie(lhs.btree_, lhs.leaf_node_index_, lhs.leaf_index_)
+                == std::tie(rhs.btree_, rhs.leaf_node_index_, rhs.leaf_index_);
         }
 
         btree_iterator & operator++() {
@@ -233,7 +250,7 @@ namespace bt {
         }
 
         btree_iterator & operator--() {
-            auto& node = current_leaf();
+            // auto& node = current_leaf();
             if (leaf_index_ == 0)
                 go_backward();
             else
@@ -255,13 +272,9 @@ namespace bt {
                 std::ref(node.keys()[leaf_index_]), std::ref(node.values()[leaf_index_]));
         };
 
-        // auto operator->() -> std::pair<key_type const&, value_type &> {
-        //     return this->operator*();
-        // }
-
     protected:
         auto current_leaf() -> leaf_node_type& {
-            return btree_.leaf_node(leaf_node_index_);
+            return btree_->leaf_node(leaf_node_index_);
         }
 
         auto go_forward() {
@@ -274,22 +287,36 @@ namespace bt {
             }
         }
         auto go_backward() {
-            auto& node = current_leaf();
-            if (node.has_previous_leaf_index()) {
+            leaf_node_type *p_leaf = nullptr;
+            if (is_end()) {
+                leaf_node_index_ = btree_->last_leaf_index();
+                p_leaf = &current_leaf();
+                leaf_index_ = p_leaf->keys().size() > 0 ? p_leaf->keys().size() - 1 : 0;
+            } else if (auto &node = current_leaf(); node.has_previous_leaf_index()) {
                 leaf_node_index_ = node.previous_leaf_index();
-                leaf_index_ = node.keys().size() > 0 ? node.keys().size() - 1 : 0;
+                auto &prev_node = current_leaf();
+                leaf_index_ = prev_node.keys().size() > 0 ? prev_node.keys().size() - 1 : 0;
             } else {
-                set_end();
+                set_begin();
             }
         }
         auto set_end() {
-            leaf_node_index_ = INVALID_INDEX;
+            leaf_node_index_ = btree_->nodes_.size();
+            leaf_index_ = 0;
+        }
+
+        auto is_end() const -> bool {
+            return leaf_node_index_ == btree_->nodes_.size() && leaf_index_ == index_type(0);
+        }
+
+        auto set_begin() {
+            leaf_node_index_ =  btree_->first_leaf_index();
             leaf_index_ = 0;
         }
     private:
         friend btree_type;
 
-        btree_type& btree_;
+        btree_type* btree_;
         index_type leaf_node_index_ = INVALID_INDEX;
         index_type leaf_index_ = 0;
     };
@@ -329,6 +356,48 @@ namespace bt {
 
         auto get_or(const key_type &key, const value_type &default_value = value_type()) -> value_type&;
 
+        friend std::ostream &operator<<(std::ostream &out, const btree &tree) {
+            auto out_array = [](std::ostream &o, auto const &a, std::string const &separator = ", ") -> std::ostream& {
+                if (a.size() > 0)
+                    o << a[0];
+                for (index_type i = 1; i < a.size(); ++i)
+                    o << ", " << a[i];
+                return o;
+            };
+            std::function<void(const common_node_type&)> stringify = [&tree, &out, &stringify, &out_array](auto const &node) -> void {
+                std::visit(
+                    [&tree, &out, &stringify, &out_array](auto const &this_node) {
+                        auto d = tree.node_depth(this_node.index_);
+                        std::string prefix(static_cast<size_t>(4 * d), ' ');
+                        out << prefix << "\"" << this_node.index() << "\": {\n";
+                        out << prefix << "  \"keys\": [";
+                        out_array(out, this_node.keys())  << "], \n";;
+                        if constexpr (std::is_same_v<std::decay_t<decltype(this_node)>, leaf_node_type>) {
+                            out << prefix << "  \"values\": [";
+                            out_array(out, this_node.values())  << "],\n";
+                            out << prefix << "  \"previous\": " << this_node.previous_leaf_index() << ",\n";
+                            out << prefix << "  \"next\": " << this_node.next_leaf_index() << "}\n";
+                        } else {
+                            out << prefix << "  \"children\": {\n";
+                            for (index_type i = 0; i < this_node.child_indices().size(); ++i)
+                                stringify(tree.node(this_node.child_indices()[i]));
+                            out << prefix << "  }\n" << prefix << "},\n";
+                        }
+                    },
+                    node);
+            };
+            out << "{\n";
+            stringify(tree.node(tree.root_index()));
+            out << "}\n";
+            return out;
+        }
+
+        [[nodiscard]] explicit operator std::string() const {
+            std::ostringstream oss;
+            oss << (*this);
+            return oss.str();
+        }
+
     protected:
         auto is_root(index_type index) const noexcept -> bool {
             return index == root_index_;
@@ -339,7 +408,23 @@ namespace bt {
         auto is_root(internal_node_type const & node) const noexcept -> bool {
             return is_root(node.index());
         }
+        [[nodiscard]] index_type root_index() const { return root_index_; }
+
+        [[nodiscard]] auto node_depth(index_type node_index) const -> index_type {
+            return std::visit([this](auto& n) {
+                if (n.has_parent())
+                    return 1 + node_depth(n.parent_index());
+                return 1;
+            }, node(node_index));
+        }
+
         auto node(index_type const & index) -> common_node_type& {
+            assert(("node index out of bounds", index < nodes_.size()));
+            if (index >= nodes_.size())
+                throw std::out_of_range("node index out of bounds");
+            return nodes_[index];
+        }
+        auto node(index_type const & index) const -> const common_node_type& {
             assert(("node index out of bounds", index < nodes_.size()));
             if (index >= nodes_.size())
                 throw std::out_of_range("node index out of bounds");
@@ -377,13 +462,19 @@ namespace bt {
 
         auto create_leaf_node(index_type const &parent_index = INVALID_INDEX) -> index_type;
 
-        auto find_insert_position(const key_type &key) -> iterator;
+        auto first_leaf_index() const -> index_type;
+
+        auto last_leaf_index() const -> index_type;
+
+        auto find_insert_position(const key_type &key, const index_type &start_index) -> iterator;
 
         auto insert_split_internal(index_type node_index, const key_type &key, index_type child_index) -> bool;
 
-        auto insert_internal(index_type node_index, const key_type &key, index_type child_index) -> bool;
+        auto insert_internal(index_type node_index, const key_type &key, index_type child_index, bool allow_recurse) -> bool;
 
         auto insert_split_leaf(iterator insert_pos, const key_type &key, const value_type &value) -> bool;
+
+        auto insert_leaf(iterator insert_pos, const key_type &key, const value_type &value, bool allow_recurse) -> bool;
 
 
     private:
@@ -414,15 +505,8 @@ namespace bt {
 
     template<typename Key, typename Value, typename Index, size_t Order>
     auto btree<Key, Value, Index, Order>::insert(key_type const &key, value_type const &value) -> bool {
-        iterator it = find_insert_position(key);
-        leaf_node_type& leaf = it.current_leaf();
-        if (leaf.size() < leaf_node_type::order()) {
-            leaf.keys_.insert(leaf.keys_.begin() + it.leaf_index_, key);
-            leaf.values_.insert(leaf.values_.begin() + it.leaf_index_, value);
-        } else {
-            insert_split_leaf(it, key, value);
-        }
-        return true;
+        iterator it = find_insert_position(key, root_index());
+        return insert_leaf(it, key, value, true);
     }
 
     template<typename Key, typename Value, typename Index, size_t Order>
@@ -468,8 +552,28 @@ namespace bt {
     }
 
     template<typename Key, typename Value, typename Index, size_t Order>
-    auto btree<Key, Value, Index, Order>::find_insert_position(const key_type &key) -> iterator {
-        index_type node_index = root_index_;
+    auto btree<Key, Value, Index, Order>::first_leaf_index() const -> index_type {
+        auto index = root_index_;
+        for (const internal_node_type *p_node = std::get_if<internal_node_type>(&node(index));
+            p_node != nullptr;
+             index = p_node->child_indices().front(), p_node = std::get_if<internal_node_type>(&node(index)))
+            {}
+        return index;
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Order>
+    auto btree<Key, Value, Index, Order>::last_leaf_index() const -> index_type {
+        auto index = root_index_;
+        for (const internal_node_type *p_node = std::get_if<internal_node_type>(&node(index));
+            p_node != nullptr;
+            index = p_node->child_indices().back(), p_node = std::get_if<internal_node_type>(&node(index)))
+            {}
+        return index;
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Order>
+    auto btree<Key, Value, Index, Order>::find_insert_position(const key_type &key, const index_type &start_index) -> iterator {
+        index_type node_index = start_index;
         do {
             if (node_index == INVALID_INDEX) {
                 assert(("should never happen", false));
@@ -520,27 +624,24 @@ namespace bt {
         std::ranges::advance(first_child_indices_it, 1, p_internal->child_indices().end());
         std::move(first_child_indices_it, p_internal->child_indices().end(), std::back_inserter(new_internal.child_indices()));
 
-        // adjust parent index for all children of the new right node
-        for (auto index : new_internal.child_indices())
-            std::visit([&](auto &node) {
-               node.set_parent_index(new_internal_index);
-            }, node(index));
-
         // shrink left node
         p_internal->keys().resize(pivot_index);
         p_internal->child_indices().resize(pivot_index + 1);
 
         // insert key and value into one of the internal nodes
         internal_node_type* p_insert_internal = (key < pivot_key) ? p_internal : &new_internal;
-        auto insert_key_pos_it = std::upper_bound(p_insert_internal->keys().begin(), p_insert_internal->keys().end(), key);
-        auto insert_values_it = p_insert_internal->child_indices().begin() + std::distance(p_insert_internal->keys().begin(), insert_key_pos_it);
-        p_insert_internal->keys().insert(insert_key_pos_it, key);
-        p_insert_internal->child_indices().insert(insert_values_it, child_index);
+        insert_internal(p_insert_internal->index(), key, child_index, false);
+
+        // adjust parent index for all children of the new right node
+        for (auto index : new_internal.child_indices())
+            std::visit([&](auto &node) {
+               node.set_parent_index(new_internal_index);
+            }, node(index));
 
         if (is_root(*p_internal)) {
             grow(node_index, new_internal_index, pivot_key);
         } else {
-            insert_internal(p_internal->parent_index(), pivot_key, new_internal_index);
+            insert_internal(p_internal->parent_index(), pivot_key, new_internal_index, true);
         }
 
         return true;
@@ -548,7 +649,7 @@ namespace bt {
 
     template<typename Key, typename Value, typename Index, size_t Order>
     auto btree<Key, Value, Index, Order>::insert_internal(index_type node_index, const key_type &key,
-        index_type child_index) -> bool { // TODO: debug this function
+                                                          index_type child_index, bool allow_recurse) -> bool {
         internal_node_type& node = internal_node(node_index);
         if (node.size() < node.order()) {
             auto insert_pos_it = std::upper_bound(node.keys().begin(), node.keys().end(), key);
@@ -556,6 +657,7 @@ namespace bt {
             node.keys().insert(insert_pos_it, key);
             node.child_indices().insert(node.child_indices().begin() + insert_pos_index + 1, child_index);
         } else {
+            assert(("already recursed into insert_internal", allow_recurse == true));
             insert_split_internal(node_index, key, child_index);
         }
         return true;
@@ -588,7 +690,7 @@ namespace bt {
         new_leaf.set_previous_leaf_index(p_leaf->index());
         p_leaf->set_next_leaf_index(new_leaf_index);
         if (new_leaf.has_next_leaf_index()) {
-            auto next_leaf = leaf_node(new_leaf.next_leaf_index());
+            auto& next_leaf = leaf_node(new_leaf.next_leaf_index());
             next_leaf.set_previous_leaf_index(new_leaf.index());
         }
 
@@ -598,20 +700,33 @@ namespace bt {
 
         // insert key and value into one of the leaf nodes
         leaf_node_type* p_insert_leaf = (key < pivot_key) ? p_leaf : &new_leaf;
-        auto insert_key_pos_it = std::upper_bound(p_insert_leaf->keys().begin(), p_insert_leaf->keys().end(), key);
-        auto insert_values_it = p_insert_leaf->values().begin() + std::distance(p_insert_leaf->keys().begin(), insert_key_pos_it);
-        p_insert_leaf->keys().insert(insert_key_pos_it, key);
-        p_insert_leaf->values().insert(insert_values_it, value);
+        auto new_insert_pos = find_insert_position(key, p_insert_leaf->index());
+        insert_leaf(new_insert_pos, key, value, false);
 
         if (is_root(*p_leaf)) {
             grow(p_leaf->index(), new_leaf_index, pivot_key);
         } else {
             // insert pivot_key into parent (internal) node
-            insert_internal(p_leaf->parent_index(), pivot_key, new_leaf_index);
+            insert_internal(p_leaf->parent_index(), pivot_key, new_leaf_index, true);
         }
 
+        return true;
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Order>
+    auto btree<Key, Value, Index, Order>::insert_leaf(iterator insert_pos, const key_type &key,
+        const value_type &value, bool allow_recurse) -> bool {
+        leaf_node_type& leaf = insert_pos.current_leaf();
+        if (leaf.size() < leaf_node_type::order()) {
+            leaf.keys_.insert(leaf.keys_.begin() + insert_pos.leaf_index_, key);
+            leaf.values_.insert(leaf.values_.begin() + insert_pos.leaf_index_, value);
+        } else {
+            assert(("already recursed into insert_leaf", allow_recurse == true));
+            insert_split_leaf(insert_pos, key, value);
+        }
         return true;
     }
 } // namespace btree
 
 #endif //BTREE_H
+
