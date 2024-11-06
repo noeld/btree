@@ -6,6 +6,7 @@
 #include <random>
 #include <memory>
 #include <ranges>
+#include <unordered_set>
 #include "btree.h"
 #include "dyn_array.h"
 
@@ -62,6 +63,8 @@ struct TestClass {
         swap(lhs.value_, rhs.value_);
     }
 
+    friend std::hash<TestClass>;
+
     auto operator<=>(const TestClass &other) const {
         return value_ <=> other.value_;
     }
@@ -76,6 +79,17 @@ struct TestClass {
     static unsigned value_counter_;
     static unsigned ctor_counter_;
 };
+
+namespace std {
+    template<>
+    struct hash<TestClass> {
+        std::size_t operator()(const TestClass &obj) const noexcept {
+            std::size_t seed = 0x6832BA6B;
+            seed ^= (seed << 6) + (seed >> 2) + 0x25F0886E + static_cast<std::size_t>(obj.value_);
+            return seed;
+        }
+    };
+}
 
 unsigned TestClass::ctor_counter_ = 0;
 unsigned TestClass::value_counter_ = 0;
@@ -315,19 +329,30 @@ TEST_SUITE("test1") {
     TEST_CASE("random_keys with TestClass") {
         using btree_type = btree<TestClass, std::string, unsigned, 8>;
         btree_type tree;
+        static constexpr size_t CNT = 1'000'000;
+        std::unordered_set<TestClass> known_keys(100'000);
+
         auto randomizer = [rnd=std::mt19937{std::random_device{}()},
-                    dist = std::uniform_int_distribution<unsigned>{1, 10000}]() mutable {
+                    dist = std::uniform_int_distribution<unsigned>{1, 100'000}]() mutable {
             auto value = dist(rnd);
             return std::make_tuple(TestClass(value), std::format("{}", value));
         };
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < CNT; ++i) {
             auto [tc, str] = randomizer();
+            known_keys.insert(tc);
             tree.insert(tc, str);
         }
-        auto it = tree.begin();
-        auto last_it = it++;
-        for (; it != tree.end(); last_it = it, ++it) {
+
+        for (auto it = tree.begin(), last_it = it++;
+            it != tree.end();
+            last_it = it, ++it) {
             CHECK_LE((*last_it).first, (*it).first);
+            CHECK_EQ((*it).second, std::format("{}", (*it).first.value_));
+        }
+        for(auto const & e : known_keys) {
+            CHECK(tree.contains(e));
+            CHECK_NE(tree.find(e), tree.end());
+            CHECK_NE(tree.find_last(e), tree.end());
         }
     }
 }
