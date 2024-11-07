@@ -6,7 +6,11 @@
 #define BTREE_H
 
 #include <functional>
-
+#include <variant>
+#include <iosfwd>
+#include <string>
+#include <algorithm>
+#include <sstream>
 #include "dyn_array.h"
 
 namespace bt {

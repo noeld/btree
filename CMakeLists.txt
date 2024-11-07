@@ -8,6 +8,8 @@ add_library(btree INTERFACE
         include/dyn_array.h)
 target_include_directories(btree INTERFACE ${CMAKE_SOURCE_DIR}/include)
 
+add_subdirectory(example EXCLUDE_FROM_ALL)
+
 include(CTest)
 enable_testing()
 add_subdirectory(test)

@@ -6,6 +6,7 @@
 #define DYN_ARRAY_H
 
 #include<cassert>
+#include<stdexcept>
 
 namespace bt {
     /**
