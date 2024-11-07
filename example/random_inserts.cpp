@@ -52,18 +52,24 @@ auto test(C &container, std::ostream& out, size_t N) -> std::tuple<double, doubl
     return std::make_tuple(std::chrono::duration<double>(t2 - t1).count(), std::chrono::duration<double>(t3 - t2).count());
 }
 
-void print_time(double map_insertion, double map_reading, double btree_insertion, double btree_reading) {
-    std::println(std::cout, "{:>20}  : {:^7} | {:^7} | {:^7}", "Duration", "map", "btree", "btree/map");
-    std::println(std::cout, "{:>20}  : {:6.3f}s | {:6.3f}s | {:5.1f}%", "insertion",
-                 map_insertion, btree_insertion, btree_insertion / map_insertion * 100.0);
-    std::println(std::cout, "{:>20}  : {:6.3f}s | {:6.3f}s | {:5.1f}%", "reading",
-                 map_reading, btree_reading, btree_reading / map_reading * 100.0);
+void print_time(double map_insertion, double map_reading, double btree_insertion, double btree_reading,
+                double botree_insertion, double botree_reading) {
+    std::println(std::cout, "{:>20}  : {:^12} | {:^12} | {:^12} | {:^12} | {:^12}", "Duration", "std::map", "btree", "btree/map", "botree", "botree/map");
+    std::println(std::cout, "{:>20}  : {:11.3f}s | {:11.3f}s | {:11.1f}% | {:11.3f}s | {:11.1f}%", "insertion",
+                 map_insertion, btree_insertion, btree_insertion / map_insertion * 100.0,
+                 botree_insertion, botree_insertion / map_insertion * 100.0);
+    std::println(std::cout, "{:>20}  : {:11.3f}s | {:11.3f}s | {:11.1f}% | {:11.3f}s | {:11.1f}%", "reading",
+                 map_reading, btree_reading, btree_reading / map_reading * 100.0,
+                 botree_reading, botree_reading / map_reading * 100.0);
 }
 
 int main(int argc, char *argv[]) {
     static constexpr size_t N = 1'000'000;
 
-    using btree_type = bt::btree<TestClass, std::string, unsigned, 64>;
+    using btree_type = bt::btree<TestClass, std::string, unsigned, 200, 110>;
+    std::println(std::cout, "sizeof(internal_node_type<Order 200>) = {:8}", sizeof(btree_type::internal_node_type));
+    std::println(std::cout, "sizeof(leaf_node_type<Order 110>)     = {:8}", sizeof(btree_type::leaf_node_type));
+
     btree_type tree;
     std::ostringstream btree_out;
 
@@ -71,11 +77,27 @@ int main(int argc, char *argv[]) {
     map_type map;
     std::ostringstream map_out;
 
+    static constexpr std::size_t PAGE_SIZE = 4096;
+    constexpr auto best_internal_order = bt::best_order<bt::btree_internal_node, TestClass, std::string, unsigned, PAGE_SIZE>();
+    constexpr auto best_leaf_order = bt::best_order<bt::btree_leaf_node, TestClass, std::string, unsigned, PAGE_SIZE>();
+    using best_btree_order_type = bt::btree<TestClass, std::string, unsigned, best_internal_order, best_leaf_order>;
+    best_btree_order_type botree;
+    std::ostringstream botree_out;
+
+    std::println(std::cout, "Best order for internal nodes for page size {:4}: Order {:4} = {} bytes",
+        PAGE_SIZE, best_internal_order, sizeof(best_btree_order_type::internal_node_type));
+    std::println(std::cout, "Best order for leaf nodes for     page size {:4}: Order {:4} = {} bytes",
+        PAGE_SIZE, best_leaf_order, sizeof(best_btree_order_type::leaf_node_type));
+
     auto [btree_insertion, btree_reading] = test(tree, btree_out, N);
     auto [map_insertion, map_reading] = test(map, map_out, N);
+    auto [botree_insertion, botree_reading] = test(botree, botree_out, N);
 
     bool equal = btree_out.view() == map_out.view();
-    std::println(std::cout, "tree == map => {:}", equal);
-    print_time(map_insertion, map_reading, btree_insertion, btree_reading);
-    // std::println(std::cout, "Duration btree: {:6.3f}s ({:5.1f}% of map)", d_btree.count(), d_btree.count() / d_map.count() * 100.0);
+    std::println(std::cout, "output of btree == map => {}", equal ? "equal ☑️" : "!! not equal 🫣 !!");
+    bool boequal = botree_out.view() == map_out.view();
+    std::println(std::cout, "output of botree == map => {}", boequal ? "equal ☑️" : "!! not equal 🫣 !!");
+    print_time(map_insertion, map_reading, btree_insertion, btree_reading, botree_insertion, botree_reading);
+    std::println(std::cout, "Test with {:L} key/values (TestClass/std::string)", N);
+
 }
