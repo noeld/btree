@@ -260,8 +260,9 @@ TEST_SUITE("dyn_array") {
 
 TEST_SUITE("test1") {
     TEST_CASE("base operations") {
-        btree_internal_node<int, int, int, 5> internal;
-        btree_leaf_node<int, int, int, 5> leaf;
+        using traits = traits_type<int, int, int, 5, 5>;
+        btree_internal_node<traits> internal;
+        btree_leaf_node<traits> leaf;
         CHECK_EQ(internal.is_leaf(), false);
         CHECK_EQ(leaf.is_leaf(), true);
 
@@ -270,12 +271,12 @@ TEST_SUITE("test1") {
     }
 
     TEST_CASE("btree") {
-        using btree_type = bt::btree<int64_t, double, unsigned int, 64>;
+        using btree_type = bt::btree<int64_t, double, unsigned int, 64, 64>;
         btree_type tree;
     }
 
     TEST_CASE("node self") {
-        using btree_type = bt::btree<int64_t, double, unsigned int, 64>;
+        using btree_type = bt::btree<int64_t, double, unsigned int, 64, 64>;
         btree_type::internal_node_type internal;
         CHECK_EQ(internal.keys().size(), 0);
         btree_type::leaf_node_type leaf;
@@ -284,7 +285,7 @@ TEST_SUITE("test1") {
 
     TEST_CASE("insert") {
         TestClass tc(0xdeadbeefU);
-        using btree_type = bt::btree<TestClass, TestClass, unsigned int, 64>;
+        using btree_type = bt::btree<TestClass, TestClass, unsigned int, 64, 64>;
         btree_type tree;
         CHECK(tree.insert(TestClass(1), tc));
         auto it = tree.begin();
@@ -296,7 +297,7 @@ TEST_SUITE("test1") {
     }
 
     TEST_CASE("strictly increasing keys") {
-        using btree_type = btree<uint16_t, uint16_t, uint16_t, 4>;
+        using btree_type = btree<uint16_t, uint16_t, uint16_t, 4, 4>;
         btree_type tree;
         uint16_t count = 20;
         for (uint16_t i = 1; i < count + 1; ++i) {
@@ -311,7 +312,7 @@ TEST_SUITE("test1") {
         }
     }
     TEST_CASE("strictly decreasing keys") {
-        using btree_type = btree<uint16_t, uint16_t, uint16_t, 4>;
+        using btree_type = btree<uint16_t, uint16_t, uint16_t, 4, 4>;
         btree_type tree;
         uint16_t count = 20;
         for (uint16_t i = count + 1; i > 0; --i) {
@@ -327,7 +328,7 @@ TEST_SUITE("test1") {
     }
 
     TEST_CASE("random_keys with TestClass") {
-        using btree_type = btree<TestClass, std::string, unsigned, 8>;
+        using btree_type = btree<TestClass, std::string, unsigned, 8, 8>;
         btree_type tree;
         static constexpr size_t CNT = 1'000'000;
         std::unordered_set<TestClass> known_keys(100'000);
