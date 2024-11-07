@@ -5,6 +5,10 @@
 #ifndef TESTCLASS_H
 #define TESTCLASS_H
 
+/**
+ * TestClass implements all life cycle events (constructors, destructor, assignment copy/move)
+ * and comparison, swappable, hashable and conversion to string, output to a stream.
+ */
 struct TestClass {
     TestClass() {
         ++ctor_counter_;
