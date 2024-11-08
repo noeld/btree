@@ -177,6 +177,7 @@ TEST_SUITE("dyn_array") {
     }
 
     TEST_CASE("Compare to standard container") {
+        auto init = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
         std::array<int, 10> test_data{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
         dyn_array<int, 10, uint16_t> arr;
         std::vector<int> vec;
@@ -205,6 +206,37 @@ TEST_SUITE("dyn_array") {
                 arr.insert(arr.begin(), i);
                 vec.insert(vec.begin(), i);
                 check_eq();
+            }
+        }
+        SUBCASE("erase range") {
+            {
+                dyn_array<int, 10, uint16_t> a(init);
+                a.erase(a.begin(), a.end());
+                CHECK(a.empty());
+            }
+            {
+                dyn_array<int, 10, uint16_t> a(init);
+                REQUIRE(a.size() == 10);
+                a.erase(a.begin(), a.begin() + 5);
+                CHECK_EQ(a.size(), 5);
+                CHECK_EQ(a.front(), 6);
+                CHECK_EQ(a.back(), 10);
+            }
+            {
+                dyn_array<int, 10, uint16_t> a(init);
+                REQUIRE(a.size() == 10);
+                a.erase(a.begin() + 5, a.end());
+                CHECK_EQ(a.size(), 5);
+                CHECK_EQ(a.front(), 1);
+                CHECK_EQ(a.back(), 5);
+            }
+            {
+                dyn_array<int, 10, uint16_t> a(init);
+                REQUIRE(a.size() == 10);
+                a.erase(a.begin() + 2, a.end() - 2);
+                CHECK_EQ(a.size(), 4);
+                CHECK_EQ(a.front(), 1);
+                CHECK_EQ(a.back(), 10);
             }
         }
         SUBCASE("random actions") {
@@ -355,5 +387,23 @@ TEST_SUITE("test1") {
             CHECK_NE(tree.find(e), tree.end());
             CHECK_NE(tree.find_last(e), tree.end());
         }
+    }
+
+    TEST_CASE("operator==") {
+        using btree_type = btree<int, std::string, unsigned, 8, 8>;
+        std::ranges::iota_view init(1, 1000);
+        btree_type tree1;
+        btree_type tree2;
+        for(auto const & e : init)
+            tree1.insert(e, std::format("{}", e));
+        for (auto const & e : init | std::ranges::views::reverse) {
+            tree2.insert(e, std::format("{}", e));
+        }
+        CHECK_EQ(tree1, tree2);
+    }
+
+    TEST_CASE("find and find_last") {
+        using btree_type = btree<int, double, unsigned, 8, 8>;
+        btree_type tree;
     }
 }

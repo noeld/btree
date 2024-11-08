@@ -97,10 +97,12 @@ namespace bt {
         //begin
         [[nodiscard]] iterator begin() noexcept { return iterator(data()); }
         [[nodiscard]] constexpr const_iterator begin() const noexcept { return const_iterator(data()); }
+        [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return const_iterator(data()); }
 
         //end
         [[nodiscard]] iterator end() noexcept { return iterator(data() + size_); }
         [[nodiscard]] constexpr const_iterator end() const noexcept { return const_iterator(data() + size_); }
+        [[nodiscard]] constexpr const_iterator cend() const noexcept { return const_iterator(data() + size_); }
 
         //empty
         [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
@@ -187,6 +189,7 @@ namespace bt {
 
         iterator insert(iterator pos, const value_type& value) {
             assert( ("capacity exceeded", size_ < capacity()) );
+            assert(("insert: pos iterator of invalid range", begin() <= pos && pos <= end()));
             if (size_ >= capacity())
                 throw std::out_of_range("capacity exceeded");
             if (pos == end())
@@ -201,6 +204,7 @@ namespace bt {
         }
 
         iterator erase(iterator pos) {
+            assert(("erase: pos iterator of invalid range", begin() <= pos && pos <= end()));
             if (size() == 0)
                 return pos;
             if (pos + 1 != end())
@@ -208,6 +212,15 @@ namespace bt {
             --size_;
             std::destroy_at(&data()[size_]);
             return pos;
+        }
+
+        const_iterator erase(const_iterator first, const_iterator last) {
+            assert(("erase: first iterator of invalid range", cbegin() <= first && first <= cend()));
+            assert(("erase: last iterator of invalid range", cbegin() <= last && last <= cend()));
+            assert(("erase: first iterator > last iterator", first <= last));
+            std::move(last, cend(), iterator(first));
+            resize(size() - std::distance(first, last));
+            return first;
         }
 
         void resize(size_type new_size, value_type const & init = value_type()) {
@@ -271,3 +284,4 @@ namespace std {
 }
 
 #endif //DYN_ARRAY_H
+
