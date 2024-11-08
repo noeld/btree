@@ -40,6 +40,7 @@ namespace bt {
         dyn_array(dyn_array &&other) {
             for(auto&& e : other)
                 emplace_back_unchecked(std::move(e));
+            other.clear();
         }
 
         dyn_array(std::initializer_list<value_type> init_list) {
@@ -69,6 +70,7 @@ namespace bt {
             clear();
             for(auto && value : other)
                 emplace_back_unchecked(std::move(value));
+            other.clear();
             return *this;
         }
 

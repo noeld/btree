@@ -66,9 +66,9 @@ void print_time(double map_insertion, double map_reading, double btree_insertion
 int main(int argc, char *argv[]) {
     static constexpr size_t N = 1'000'000;
 
-    using btree_type = bt::btree<TestClass, std::string, unsigned, 200, 110>;
-    std::println(std::cout, "sizeof(internal_node_type<Order 200>) = {:8}", sizeof(btree_type::internal_node_type));
-    std::println(std::cout, "sizeof(leaf_node_type<Order 110>)     = {:8}", sizeof(btree_type::leaf_node_type));
+    using btree_type = bt::btree<TestClass, std::string, uint16_t, 51, 88>;
+    std::println(std::cout, "sizeof(internal_node_type<Order {}>) = {:8}", btree_type::internal_node_type::order(), sizeof(btree_type::internal_node_type));
+    std::println(std::cout, "sizeof(leaf_node_type<Order {}>)     = {:8}", btree_type::leaf_node_type::order(), sizeof(btree_type::leaf_node_type));
 
     btree_type tree;
     std::ostringstream btree_out;
@@ -78,9 +78,9 @@ int main(int argc, char *argv[]) {
     std::ostringstream map_out;
 
     static constexpr std::size_t PAGE_SIZE = 4096;
-    constexpr auto best_internal_order = bt::best_order<bt::btree_internal_node, TestClass, std::string, unsigned, PAGE_SIZE>();
-    constexpr auto best_leaf_order = bt::best_order<bt::btree_leaf_node, TestClass, std::string, unsigned, PAGE_SIZE>();
-    using best_btree_order_type = bt::btree<TestClass, std::string, unsigned, best_internal_order, best_leaf_order>;
+    constexpr auto best_internal_order = bt::best_order<bt::btree_internal_node, TestClass, std::string, uint16_t, PAGE_SIZE>();
+    constexpr auto best_leaf_order = bt::best_order<bt::btree_leaf_node, TestClass, std::string, uint16_t, PAGE_SIZE>();
+    using best_btree_order_type = bt::btree<TestClass, std::string, uint16_t, best_internal_order, best_leaf_order>;
     best_btree_order_type botree;
     std::ostringstream botree_out;
 
