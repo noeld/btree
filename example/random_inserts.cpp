@@ -30,7 +30,7 @@ auto test(C &container, std::ostream& out, size_t N) -> std::tuple<double, doubl
     auto t1 = std::chrono::high_resolution_clock::now();
 
     // insert random keys
-    for (auto i = 0; i < N; ++i) {
+    for (size_t i = 0; i < N; ++i) {
         auto value = dist(rng);
         if constexpr (has_key_and_value_args<C, TestClass, std::string>)
             container.insert(TestClass{value}, std::format("{:04d}", value));

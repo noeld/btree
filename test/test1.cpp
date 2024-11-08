@@ -119,7 +119,7 @@ struct assign_action : abstract_action {
     void random_init() override {
         std::uniform_int_distribution<int> distrib{0, (int) dyn_array_.capacity()};
         auto len = distrib(rnd_gen_);
-        for (auto i: std::ranges::views::iota(0, len)) {
+        for ([[maybe_unused]] auto i: std::ranges::views::iota(0, len)) {
             auto value = distrib(rnd_gen_);
             dyn_array_.emplace_back(value);
             vector_.emplace_back(value);
@@ -148,14 +148,14 @@ TEST_SUITE("dyn_array") {
             CHECK_EQ(da.capacity(), 4);
             CHECK_EQ(da.size(), 0);
             CHECK_EQ(std::distance(da.begin(), da.end()), 0);
-            CHECK_THROWS_AS(T & t = da.at(0), std::out_of_range);
+            CHECK_THROWS_AS([[maybe_unused]] auto ignore = da.at(0), std::out_of_range);
             for (auto i = 0; i < 4; ++i) {
                 da.push_back(std::get<T>(defaults));
                 CHECK(!da.empty());
                 CHECK_EQ(da.capacity(), 4);
                 CHECK_EQ(da.size(), i + 1);
                 CHECK_EQ(std::distance(da.begin(), da.end()), i + 1);
-                CHECK_NOTHROW(T & t = da.at(i));
+                CHECK_NOTHROW([[maybe_unused]] auto ignore = da.at(i));
                 if constexpr (std::is_floating_point_v<T>) {
                     CHECK_EQ(da[i], doctest::Approx(std::get<T>(defaults)));
                     CHECK_EQ(da.front(), doctest::Approx(std::get<T>(defaults)));
@@ -202,7 +202,7 @@ TEST_SUITE("dyn_array") {
             }
         }
         SUBCASE("insert at 0") {
-            for(int i = 1; i < 10; ++i) {
+            for (int i = 1; i < 10; ++i) {
                 arr.insert(arr.begin(), i);
                 vec.insert(vec.begin(), i);
                 check_eq();
@@ -213,24 +213,21 @@ TEST_SUITE("dyn_array") {
                 dyn_array<int, 10, uint16_t> a(init);
                 a.erase(a.begin(), a.end());
                 CHECK(a.empty());
-            }
-            {
+            } {
                 dyn_array<int, 10, uint16_t> a(init);
                 REQUIRE(a.size() == 10);
                 a.erase(a.begin(), a.begin() + 5);
                 CHECK_EQ(a.size(), 5);
                 CHECK_EQ(a.front(), 6);
                 CHECK_EQ(a.back(), 10);
-            }
-            {
+            } {
                 dyn_array<int, 10, uint16_t> a(init);
                 REQUIRE(a.size() == 10);
                 a.erase(a.begin() + 5, a.end());
                 CHECK_EQ(a.size(), 5);
                 CHECK_EQ(a.front(), 1);
                 CHECK_EQ(a.back(), 5);
-            }
-            {
+            } {
                 dyn_array<int, 10, uint16_t> a(init);
                 REQUIRE(a.size() == 10);
                 a.erase(a.begin() + 2, a.end() - 2);
@@ -270,7 +267,7 @@ TEST_SUITE("dyn_array") {
                         }
                         break;
                     default:
-                        assert(("unexpected action", false));
+                        DOCTEST_FAIL("Unexpected action");
                 }
                 check_eq();
             }
@@ -343,6 +340,7 @@ TEST_SUITE("test1") {
             ++it;
         }
     }
+
     TEST_CASE("strictly decreasing keys") {
         using btree_type = btree<uint16_t, uint16_t, uint16_t, 4, 4>;
         btree_type tree;
@@ -370,19 +368,19 @@ TEST_SUITE("test1") {
             auto value = dist(rnd);
             return std::make_tuple(TestClass(value), std::format("{}", value));
         };
-        for (int i = 0; i < CNT; ++i) {
+        for (size_t i = 0; i < CNT; ++i) {
             auto [tc, str] = randomizer();
             known_keys.insert(tc);
             tree.insert(tc, str);
         }
 
         for (auto it = tree.begin(), last_it = it++;
-            it != tree.end();
-            last_it = it, ++it) {
+             it != tree.end();
+             last_it = it, ++it) {
             CHECK_LE((*last_it).first, (*it).first);
             CHECK_EQ((*it).second, std::format("{}", (*it).first.value_));
         }
-        for(auto const & e : known_keys) {
+        for (auto const &e: known_keys) {
             CHECK(tree.contains(e));
             CHECK_NE(tree.find(e), tree.end());
             CHECK_NE(tree.find_last(e), tree.end());
@@ -391,12 +389,15 @@ TEST_SUITE("test1") {
 
     TEST_CASE("operator==") {
         using btree_type = btree<int, std::string, unsigned, 8, 8>;
-        std::ranges::iota_view init(1, 1000);
+        auto numbers = std::ranges::views::iota(1, 10000);
+        std::vector<int> init(numbers.begin(), numbers.end());
         btree_type tree1;
-        btree_type tree2;
-        for(auto const & e : init)
+        for (auto const &e: init)
             tree1.insert(e, std::format("{}", e));
-        for (auto const & e : init | std::ranges::views::reverse) {
+
+        btree_type tree2;
+        std::ranges::shuffle(init, std::mt19937{std::random_device{}()});
+        for (auto const &e: init) {
             tree2.insert(e, std::format("{}", e));
         }
         CHECK_EQ(tree1, tree2);

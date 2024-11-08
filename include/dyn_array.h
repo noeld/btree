@@ -74,23 +74,23 @@ namespace bt {
 
         //front
         [[nodiscard]] reference front() noexcept {
-            assert(("front undefined if empty", size_ > 0));
+            assert((size_ > 0) && "front undefined if empty");
             return data()[0];
         }
 
         [[nodiscard]] constexpr const_reference front() const noexcept {
-            assert(("front undefined if empty", size_ > 0));
+            assert((size_ > 0) && "front undefined if empty");
             return data()[0];
         }
 
         //back
         [[nodiscard]] reference back() noexcept {
-            assert(("back undefined if empty", size_ > 0));
+            assert((size_ > 0) && "back undefined if empty");
             return data()[size_ - 1];
         }
 
         [[nodiscard]] constexpr const_reference back() const noexcept {
-            assert(("back undefined if empty", size_ > 0));
+            assert((size_ > 0) && "back undefined if empty");
             return data()[size_ - 1];
         }
 
@@ -100,41 +100,42 @@ namespace bt {
         [[nodiscard]] constexpr const_iterator cbegin() const noexcept { return const_iterator(data()); }
 
         //end
-        [[nodiscard]] iterator end() noexcept { return iterator(data() + size_); }
-        [[nodiscard]] constexpr const_iterator end() const noexcept { return const_iterator(data() + size_); }
-        [[nodiscard]] constexpr const_iterator cend() const noexcept { return const_iterator(data() + size_); }
+        [[nodiscard]] iterator end() noexcept { return iterator(data() + size()); }
+        [[nodiscard]] constexpr const_iterator end() const noexcept { return const_iterator(data() + size()); }
+        [[nodiscard]] constexpr const_iterator cend() const noexcept { return const_iterator(data() + size()); }
 
         //empty
-        [[nodiscard]] constexpr bool empty() const noexcept { return size_ == 0; }
+        [[nodiscard]] constexpr bool empty() const noexcept { return size() == 0; }
+        [[nodiscard]] constexpr bool full() const noexcept { return size() == capacity(); }
 
         //size
-        [[nodiscard]] std::size_t size() const noexcept { return static_cast<std::size_t>(size_); }
+        [[nodiscard]] size_type size() const noexcept { return size_; }
 
         //max_size
-        [[nodiscard]] std::size_t max_size() const noexcept { return Capacity; }
+        [[nodiscard]] size_type max_size() const noexcept { return capacity(); }
 
         //capacity
-        [[nodiscard]] std::size_t capacity() const noexcept { return Capacity; }
+        [[nodiscard]] size_type capacity() const noexcept { return size_type(Capacity); }
 
         [[nodiscard]] constexpr pointer data() noexcept { return reinterpret_cast<pointer>(data_); }
         [[nodiscard]] constexpr const_pointer data() const noexcept { return reinterpret_cast<const_pointer>(data_); }
 
-        [[nodiscard]] reference at(size_type index) {
-            if (index >= size_)
+        [[nodiscard]] reference at(std::size_t index) {
+            if (index >= size())
                 throw std::out_of_range("index out of range");
             return data()[index];
         }
-        [[nodiscard]] constexpr const_reference at(size_type index) const {
-            if (index >= size_)
+        [[nodiscard]] constexpr const_reference at(std::size_t index) const {
+            if (index >= size())
                 throw std::out_of_range("index out of range");
             return data()[index];
         }
-        [[nodiscard]] reference operator[](size_type index) noexcept {
-            assert(("operator[] index out of range", index < size_));
+        [[nodiscard]] reference operator[](std::size_t index) noexcept {
+            assert((index < size()) && "operator[] index out of range");
             return data()[index];
         }
-        [[nodiscard]] constexpr const_reference operator[](size_type index) const noexcept {
-            assert(("operator[] index out of range", index < size_));
+        [[nodiscard]] constexpr const_reference operator[](std::size_t index) const noexcept {
+            assert((index < size()) && "operator[] index out of range");
             return data()[index];
         }
 
@@ -153,7 +154,7 @@ namespace bt {
         }
 
         void pop_back() noexcept {
-            assert(("pop_back undefined if empty", size_ > 0));
+            assert((!empty()) && "pop_back undefined if empty");
             pop_back_unchecked();
         }
 
@@ -167,30 +168,30 @@ namespace bt {
         }
 
         void push_back(const value_type& value) {
-            assert( ("capacity exceeded", size_ < capacity()) );
-            if (size_ >= capacity())
+            assert((!full()) && "capacity exceeded");
+            if (full())
                 throw std::out_of_range("capacity exceeded");
             push_back_unchecked(value);
         }
 
         void push_back(value_type&& value) {
-            assert( ("capacity exceeded", size_ < capacity()) );
-            if (size_ >= capacity())
+            assert((!full()) && "capacity exceeded");
+            if (full())
                 throw std::out_of_range("capacity exceeded");
             emplace_back_unchecked(std::move(value));
         }
 
         void emplace_back(auto && ... args) {
-            assert( ("capacity exceeded", size_ < capacity()) );
-            if (size_ >= capacity())
+            assert((!full()) && "capacity exceeded");
+            if (full())
                 throw std::out_of_range("capacity exceeded");
             emplace_back_unchecked(std::forward<decltype(args)>(args)...);
         }
 
         iterator insert(iterator pos, const value_type& value) {
-            assert( ("capacity exceeded", size_ < capacity()) );
-            assert(("insert: pos iterator of invalid range", begin() <= pos && pos <= end()));
-            if (size_ >= capacity())
+            assert((!full()) && "capacity exceeded");
+            assert((begin() <= pos && pos <= end()) && "insert: pos iterator of invalid range");
+            if (full())
                 throw std::out_of_range("capacity exceeded");
             if (pos == end())
                 push_back(value);
@@ -204,9 +205,9 @@ namespace bt {
         }
 
         iterator erase(iterator pos) {
-            assert(("erase: pos iterator of invalid range", begin() <= pos && pos <= end()));
-            if (size() == 0)
-                return pos;
+            assert((begin() <= pos && pos <= end()) && "erase: pos iterator of invalid range");
+            if (empty())
+                return end();
             if (pos + 1 != end())
                 std::move(pos + 1, end(), pos);
             --size_;
@@ -215,23 +216,20 @@ namespace bt {
         }
 
         const_iterator erase(const_iterator first, const_iterator last) {
-            assert(("erase: first iterator of invalid range", cbegin() <= first && first <= cend()));
-            assert(("erase: last iterator of invalid range", cbegin() <= last && last <= cend()));
-            assert(("erase: first iterator > last iterator", first <= last));
+            assert((cbegin() <= first && first <= cend()) && "erase: first iterator of invalid range");
+            assert((cbegin() <= last && last <= cend()) && "erase: last iterator of invalid range");
+            assert((first <= last) && "erase: first iterator > last iterator");
             std::move(last, cend(), iterator(first));
             resize(size() - std::distance(first, last));
             return first;
         }
 
-        void resize(size_type new_size, value_type const & init = value_type()) {
-            assert( ("resize capacity exceeded", new_size <= capacity()) );
-            if (new_size < size()) {
-                while(size() > new_size)
-                    pop_back_unchecked();
-            } else if (new_size > size()) {
-                while(size() < new_size)
-                    push_back_unchecked(init);
-            }
+        void resize(std::size_t new_size, value_type const & init = value_type()) {
+            assert((new_size <= capacity()) && "resize capacity exceeded");
+            while(size() > new_size)
+                pop_back_unchecked();
+            while(size() < new_size)
+                push_back_unchecked(init);
         }
 
     protected:
