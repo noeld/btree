@@ -74,6 +74,24 @@ namespace bt {
             return *this;
         }
 
+        dyn_array & operator=(std::initializer_list<value_type> init_list) {
+            if (init_list.size() > capacity()) {
+                throw std::length_error("Initializer list size is greater than dyn_array capacity");
+            }
+            clear();
+            for(auto && value : init_list)
+                emplace_back_unchecked(std::move(value));
+            return *this;
+        }
+
+        friend bool operator==(const dyn_array &lhs, const dyn_array &rhs) {
+            return lhs.size_ == rhs.size_ && std::ranges::equal(lhs, rhs);
+        }
+
+        friend bool operator!=(const dyn_array &lhs, const dyn_array &rhs) {
+            return !(lhs == rhs);
+        }
+
         //front
         [[nodiscard]] reference front() noexcept {
             assert((size_ > 0) && "front undefined if empty");
@@ -147,8 +165,10 @@ namespace bt {
             if (longer->size() < shorter->size())
                 std::swap(longer, shorter);
             std::swap_ranges(shorter->begin(), shorter->end(), longer->begin());
-            std::copy(longer->begin() + shorter->size(), longer->end(), std::back_inserter(*shorter));
-            std::swap(size_, other.size_);
+            std::move(longer->begin() + shorter->size(), longer->end(), std::back_inserter(*shorter));
+            auto longer_size = longer->size();
+            longer->resize(shorter->size());
+            shorter->size_ = longer_size;
         }
 
         void fill(const value_type &value) {
@@ -203,6 +223,19 @@ namespace bt {
                 ++size_;
                 *pos = value;
             }
+            return pos;
+        }
+
+        iterator insert_space(iterator pos, size_type count) {
+            assert((size() + count < capacity()) && "insert_space: capacity exceeded");
+            assert((begin() <= pos && pos <= end()) && "insert: pos iterator of invalid range");
+            if (count == 0)
+                return pos;
+            if (size() + count > capacity())
+                throw std::out_of_range("capacity exceeded");
+            auto old_size = size();
+            resize(size() + count);
+            std::move_backward(pos, begin() + old_size, end());
             return pos;
         }
 
