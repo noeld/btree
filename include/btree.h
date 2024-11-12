@@ -236,9 +236,9 @@ namespace bt {
         using value_type = Value;
         using index_type = Index;
         static constexpr std::size_t internal_order = Internal_order;
-        static constexpr std::size_t min_internal_order = std::max(Internal_order / 2 - 1, 1UL);
+        static constexpr std::size_t min_internal_order = std::max(Internal_order / 2, 1UL);
         static constexpr std::size_t leaf_order = Leaf_order;
-        static constexpr std::size_t min_leaf_order = std::max(Leaf_order / 2 - 1, 1UL);
+        static constexpr std::size_t min_leaf_order = std::max(Leaf_order / 2, 1UL);
         template<bool Is_leaf>
         static consteval  std::size_t get_order() {
             if constexpr  (Is_leaf) return leaf_order; else return internal_order;
@@ -848,6 +848,11 @@ namespace bt {
     }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
+    auto btree<Key, Value, Index, Internal_order, Leaf_order>::shrink() -> index_type {
+        return {};
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::create_internal_node(index_type const &parent_index) -> index_type {
         auto index = index_type(nodes_.size());
         assert((index != INVALID_INDEX) && "create_internal_node: node index overflow");
@@ -1057,6 +1062,11 @@ namespace bt {
     }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
+    auto btree<Key, Value, Index, Internal_order, Leaf_order>::merge_internal(index_type internal_node_index) -> bool {
+        return true; // TODO
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::erase_internal(index_type internal_node_index,
         index_type child_node_index) -> bool {
         internal_node_type &internal = internal_node(internal_node_index);
@@ -1084,7 +1094,7 @@ namespace bt {
         auto right_leaf_index = left_leaf.next_leaf_index();
         leaf_node_type& right_leaf = leaf_node(right_leaf_index);
         assert((left_leaf.parent_index() == right_leaf.parent_index()) && "merge_leaf(index_type left_leaf_index): Cannot merge leaf nodes with different parent nodes");
-        assert((left_leaf.has_previous_leaf_index() && left_leaf.previous_leaf_index() == left_leaf_index) && "Right node does not point to left node");
+        assert((right_leaf.has_previous_leaf_index() && right_leaf.previous_leaf_index() == left_leaf_index) && "Right node does not point to left node");
         assert((left_leaf.keys().front() <= right_leaf.keys().front()) && "merge_leaf(index_type left_leaf_index): order of nodes is obviously wrong");
         assert((left_leaf.size() <= traits::min_leaf_order) && "merge_leaf(index_type left_leaf_index): left node is to big to merge");
         assert((right_leaf.size() <= traits::min_leaf_order) && "merge_leaf(index_type left_leaf_index): right node is to big to merge");
@@ -1108,7 +1118,15 @@ namespace bt {
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::rebalance_internal_node(
         index_type internal_node_index) -> bool {
         internal_node_type* p_internal = &internal_node(internal_node_index);
-        auto [prev_index, next_index] = p_internal->siblings_for_index(internal_node_index);
+        if (is_root(internal_node_index)) {
+            if (p_internal->size() == 0) {
+                shrink();
+                return true;
+            }
+            return false;
+        }
+        internal_node_type* p_parent = &internal_node(p_internal->parent_index());
+        auto [prev_index, next_index] = p_parent->siblings_for_index(internal_node_index);
 
         internal_node_type* p_prev = nullptr;
         index_type prev_size = 0;
@@ -1195,7 +1213,7 @@ namespace bt {
                 assert("rebalance_leaf_node(index_type leaf_nodex_index): Unreachable rebalance strategy");
         }
         if (p_chosen_neighbour != nullptr) {
-            index_type copy_cnt = std::min(1, std::midpoint(p_leaf->size(), p_chosen_neighbour->size()));
+            index_type copy_cnt = std::min(index_type(1), std::midpoint(p_leaf->size(), p_chosen_neighbour->size()));
             bool is_next = p_chosen_neighbour == p_next_leaf;
             index_type start_index = is_next ? 0 : p_chosen_neighbour->size() - copy_cnt;
             index_type end_index = is_next ? copy_cnt : p_chosen_neighbour->size();
@@ -1215,7 +1233,7 @@ namespace bt {
             std::move(p_chosen_neighbour->keys().begin() + start_index, p_chosen_neighbour->keys().begin() + end_index, key_insertion_it);
             std::move(p_chosen_neighbour->values().begin() + start_index, p_chosen_neighbour->values().begin() + end_index, value_insertion_it);
             p_chosen_neighbour->keys().erase(p_chosen_neighbour->keys().begin() + start_index, p_chosen_neighbour->keys().begin() + end_index);
-            p_chosen_neighbour->values().erase(p_chosen_neighbour->values.begin() + start_index, p_chosen_neighbour->values().begin() + end_index);
+            p_chosen_neighbour->values().erase(p_chosen_neighbour->values().begin() + start_index, p_chosen_neighbour->values().begin() + end_index);
         }
         return true;
     }

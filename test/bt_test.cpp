@@ -13,14 +13,28 @@
 #include "test_class.h"
 
 namespace bt {
+
+    template<typename IT1, typename IT2>
+    bool equal_sequence(IT1 first1, IT1 last1, IT2 first2, IT2 last2, auto && proj1, auto && proj2) {
+        auto const & p1 = std::forward<decltype(proj1)>(proj1);
+        auto const & p2 = std::forward<decltype(proj2)>(proj2);
+        auto it1 = first1, it2 = first2;
+        for (; it1 != last1 && it2 != last2; ++it1, ++it2) {
+            if(p1(*it1) != p2(*it2))
+                return false;
+        }
+        return it1 == last1 && it2 == last2;
+    }
+
     class btree_test_class {
     public:
         using btree_type = btree<int, int, unsigned, 4, 4>;
 
         static void test_merge_leaf() {
             const auto left_keys = { 1};
-            const auto right_keys = { 2, 3, 4};
+            const auto right_keys = { 2, 3};
             const auto root_keys = { 2 };
+            const auto all_keys = {1, 2, 3};
 
             btree_type::internal_node_type root { 0 };
             root.keys() = root_keys;
@@ -45,7 +59,40 @@ namespace bt {
             tree.merge_leaf(1);
 
             INFO("btree after is: ", static_cast<std::string>(tree));
+            auto res = equal_sequence(tree.begin(), tree.end(), all_keys.begin(), all_keys.end(), [](auto const & e) -> decltype(auto) { return e.first; }, std::identity{} );
+            CHECK(res);
 
+        }
+
+        static void test_rebalance_leaf() {
+            const auto left_keys = {1};
+            const auto right_keys = {2, 3, 4};
+            const auto root_keys = {2};
+            const auto all_keys = {1, 2, 3, 4};
+
+            btree_type::internal_node_type root{0};
+            root.keys() = root_keys;
+            root.child_indices() = {1, 2};
+
+            btree_type::leaf_node_type left{1, 0};
+            left.set_next_leaf_index(2);
+            left.keys() = left_keys;
+            left.values() = left_keys;
+
+            btree_type::leaf_node_type right{2, 0};
+            right.set_previous_leaf_index(1);
+            right.keys() = right_keys;
+            right.values() = right_keys;
+
+            btree_type tree;
+            std::vector<btree_type::common_node_type> nodes{root, left, right};
+            tree.nodes_ = nodes;
+
+            INFO("btree before is: ", static_cast<std::string>(tree));
+            tree.rebalance_leaf_node(1);
+            INFO("btree after is: ", static_cast<std::string>(tree));
+            auto res = equal_sequence(tree.begin(), tree.end(), all_keys.begin(), all_keys.end(), [](auto const & e) -> decltype(auto) { return e.first; }, std::identity{} );
+            CHECK(res);
         }
     };
 }
@@ -229,5 +276,9 @@ TEST_SUITE("btree") {
 
     TEST_CASE("merge") {
         btree_test_class::test_merge_leaf();
+    }
+
+    TEST_CASE("test_rebalance_leaf") {
+        btree_test_class::test_rebalance_leaf();
     }
 }
