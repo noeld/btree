@@ -743,7 +743,7 @@ namespace bt {
 
         auto insert_leaf(iterator insert_pos, const key_type &key, const value_type &value, bool allow_recurse) -> bool;
 
-        auto merge_internal(index_type internal_node_index) -> bool; // TODO
+        auto merge_internal(index_type left_node_index) -> bool;
 
         auto erase_internal(index_type internal_node_index, index_type child_node_index) -> bool;
 
@@ -754,6 +754,13 @@ namespace bt {
         auto rebalance_leaf_node(index_type leaf_nodex_index) -> bool;
 
         auto delete_node(index_type node_index);
+
+        /**
+         * @brief For the node with child_node_index set the correlated key in the (internal) parent node to the first value of the child node
+         * @param child_node_index
+         * @param p_correlated_key a pointer to the first key of the child_node used to transport it further up the tree
+         */
+        auto adjust_parent_key(index_type child_node_index, key_type const *p_correlated_key = nullptr) -> void;
 
     private:
         friend iterator_base_type;
@@ -771,10 +778,10 @@ namespace bt {
         return insert_leaf(it, key, value, true);
     }
 
-    template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
-    auto btree<Key, Value, Index, Internal_order, Leaf_order>::erase(key_type const &key) -> std::size_t {
-        return 0; // TODO
-    }
+    // template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
+    // auto btree<Key, Value, Index, Internal_order, Leaf_order>::erase(key_type const &key) -> std::size_t {
+    //     return 0; // TODO
+    // }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::erase(const_iterator it) -> std::size_t {
@@ -789,11 +796,11 @@ namespace bt {
         return 1;
     }
 
-    template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
-    auto btree<Key, Value, Index, Internal_order, Leaf_order>::erase(const_iterator first,
-        const_iterator last) -> std::size_t {
-        return 0;
-    }
+    // template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
+    // auto btree<Key, Value, Index, Internal_order, Leaf_order>::erase(const_iterator first,
+    //     const_iterator last) -> std::size_t {
+    //     return 0; // TODO
+    // }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::find(key_type const &key) -> iterator {
@@ -849,7 +856,20 @@ namespace bt {
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::shrink() -> index_type {
-        return {};
+        auto root_node = node(root_index());
+        internal_node_type* p_old_root = std::get_if<internal_node_type>(&root_node);
+        assert((p_old_root != nullptr) && "Cannot shrink with leaf root node");
+        if (p_old_root == nullptr)
+            throw std::runtime_error("Cannot shrink with leaf root node");
+        assert((p_old_root->child_indices().size() == 1) && "shrink(): root node has more or less than 1 child");
+        root_index_ = p_old_root->child_indices().front();
+        std::visit([&](auto & node) {
+            node.set_parent_index(INVALID_INDEX);
+        }, node(p_old_root->child_indices().front()));
+        p_old_root->child_indices().clear();
+        p_old_root->keys().clear();
+        p_old_root->mark_deleted();
+        return root_index();
     }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
@@ -1062,8 +1082,24 @@ namespace bt {
     }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
-    auto btree<Key, Value, Index, Internal_order, Leaf_order>::merge_internal(index_type internal_node_index) -> bool {
-        return true; // TODO
+    auto btree<Key, Value, Index, Internal_order, Leaf_order>::merge_internal(index_type left_node_index) -> bool {
+        assert(!is_root(left_node_index) && "merge_internal(index_type left_node_index): Cannot merge root node");
+        internal_node_type* p_left = &internal_node(left_node_index);
+        assert((p_left->size() <= traits::min_internal_order) && "merge_internal(left_node_index internal_node_index): left node is to big to merge");
+        internal_node_type* p_parent = &internal_node(p_left->parent_index());
+        auto [_, right_index] = p_parent->siblings_for_index(left_node_index);
+        assert((right_index != INVALID_INDEX) && "merge_internal(index_type left_node_index): There is no right node to merge with");
+        internal_node_type* p_right = &internal_node(right_index);
+        assert((p_right->size() == traits::min_internal_order) && "merge_internal(left_node_index internal_node_index): right node is to big to merge");
+
+        std::move(p_right->keys().begin(), p_right->keys().end(), std::back_inserter(p_left->keys()));
+        p_right->keys().clear();
+        std::move(p_right->child_indices().begin(), p_right->child_indices().end(), std::back_inserter(p_left->child_indices()));
+        p_right->child_indices().clear();
+
+        erase_internal(p_right->parent_index(), right_index);
+        p_right->mark_deleted();
+        return true;
     }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
@@ -1111,6 +1147,7 @@ namespace bt {
             next_leaf.set_previous_leaf_index(left_leaf.index());
         }
         erase_internal(right_leaf.parent_index(), right_leaf_index);
+        right_leaf.mark_deleted();
         return true;
     }
 
@@ -1154,14 +1191,37 @@ namespace bt {
                 p_chosen_neighbour = p_next;
                 break;
             case 0x00: // none: merge
-                merge_internal(internal_node_index);
+                merge_internal(next_index != INVALID_INDEX ? internal_node_index : prev_index);
                 return true;
                 break;
             default:
                 assert("rebalance_internal_node(index_type internal_nodex_index): Unreachable rebalance strategy");
         }
         if (p_chosen_neighbour != nullptr) {
-            // TODO
+            index_type copy_cnt = std::min(index_type(1), std::midpoint(p_internal->size(), p_chosen_neighbour->size()));
+            bool is_next = p_chosen_neighbour == p_next;
+            index_type key_start_index = is_next ? 0 : p_chosen_neighbour->size() - copy_cnt;
+            index_type value_start_index = is_next ? 0 : p_chosen_neighbour->child_indices().size() - copy_cnt;
+            index_type key_end_index = is_next ? copy_cnt : p_chosen_neighbour->size();
+            index_type value_end_index = is_next ? copy_cnt : p_chosen_neighbour->child_indices().size() - copy_cnt;
+            auto key_insertion_it = is_next ? p_internal->keys().end() : p_internal->keys().begin();
+            auto index_insertion_it = is_next ? p_internal->child_indices().end() : p_internal->child_indices().begin();
+            if (is_next) {
+                p_internal->keys().resize(p_internal->keys().size() + copy_cnt);
+                p_internal->child_indices().resize(p_internal->child_indices().size() + copy_cnt);
+            } else {
+                p_internal->keys().insert_space(p_internal->keys().begin(), copy_cnt);
+                p_internal->child_indices().insert_space(p_internal->child_indices().begin(), copy_cnt);
+            }
+            std::move(p_chosen_neighbour->keys().begin() + key_start_index, p_chosen_neighbour->keys().begin() + key_end_index, key_insertion_it);
+            p_chosen_neighbour->keys().erase(p_chosen_neighbour->keys().begin() + key_start_index, p_chosen_neighbour->keys().begin() + key_end_index);
+            std::move(p_chosen_neighbour->child_indices().begin() + value_start_index, p_chosen_neighbour->child_indices().begin() + value_end_index, index_insertion_it);
+            p_chosen_neighbour->child_indices().erase(p_chosen_neighbour->child_indices().begin() + value_start_index, p_chosen_neighbour->child_indices().begin() + value_end_index);
+
+            if (is_next)
+                adjust_parent_key(p_chosen_neighbour->index());
+            else
+                adjust_parent_key(p_internal->index());
         }
         return false;
     }
@@ -1206,7 +1266,7 @@ namespace bt {
                 p_chosen_neighbour = p_next_leaf;
                 break;
             case 0x00: // none: merge
-                merge_leaf(leaf_node_index);
+                merge_leaf(p_leaf->has_next_leaf_index() ? p_leaf->next_leaf_index() : p_leaf->previous_leaf_index() );
                 return true;
                 break;
             default:
@@ -1217,23 +1277,26 @@ namespace bt {
             bool is_next = p_chosen_neighbour == p_next_leaf;
             index_type start_index = is_next ? 0 : p_chosen_neighbour->size() - copy_cnt;
             index_type end_index = is_next ? copy_cnt : p_chosen_neighbour->size();
-            auto key_insertion_it = p_leaf->keys().begin();
-            auto value_insertion_it = p_leaf->values().begin();
+            auto key_insertion_it = is_next ? p_leaf->keys().end() : p_leaf->keys().begin();
+            auto value_insertion_it = is_next ? p_leaf->values().end() : p_leaf->values().begin();
             if (is_next) {
-                // move from right to left
-                key_insertion_it = p_leaf->keys().end();
-                value_insertion_it = p_leaf->values().end();
+                // move from beginning of right (p_chosen_neighbour) to end of left (p_leaf)
                 p_leaf->keys().resize(p_leaf->keys().size() + copy_cnt);
                 p_leaf->values().resize(p_leaf->values().size() + copy_cnt);
             } else {
-                // move from left to right
+                // move from end of left (p_chosen_neighbour) to beginning of right (p_leaf)
                 p_leaf->keys().insert_space(p_leaf->keys().begin(), copy_cnt);
                 p_leaf->values().insert_space(p_leaf->values().begin(), copy_cnt);
             }
             std::move(p_chosen_neighbour->keys().begin() + start_index, p_chosen_neighbour->keys().begin() + end_index, key_insertion_it);
-            std::move(p_chosen_neighbour->values().begin() + start_index, p_chosen_neighbour->values().begin() + end_index, value_insertion_it);
             p_chosen_neighbour->keys().erase(p_chosen_neighbour->keys().begin() + start_index, p_chosen_neighbour->keys().begin() + end_index);
+            std::move(p_chosen_neighbour->values().begin() + start_index, p_chosen_neighbour->values().begin() + end_index, value_insertion_it);
             p_chosen_neighbour->values().erase(p_chosen_neighbour->values().begin() + start_index, p_chosen_neighbour->values().begin() + end_index);
+
+            if (is_next)
+                adjust_parent_key(p_chosen_neighbour->index());
+            else
+                adjust_parent_key(p_leaf->index());
         }
         return true;
     }
@@ -1243,6 +1306,25 @@ namespace bt {
         std::visit([](auto & node) {
             node.mark_deleted();
         }, node(node_index));
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
+    auto btree<Key, Value, Index, Internal_order, Leaf_order>::adjust_parent_key(index_type child_node_index, key_type const *p_correlated_key) -> void {
+        if (is_root(child_node_index))
+            return;
+        auto const & child_node = node(child_node_index);
+        std::visit([this, p_correlated_key](auto & node) {
+            assert((node.keys().size() > 0) && "adjust_parent_key(index_type): Child node has no keys!");
+            internal_node_type& parent = internal_node(node.parent_index());
+            auto [key_it, child_index_it] = parent.iterators_for_index(node.index());
+            if (key_it != parent.keys().end())
+                *key_it = p_correlated_key != nullptr ? *p_correlated_key : node.keys().front();
+            else {
+                // recurse up
+                if (parent.has_parent())
+                    adjust_parent_key(parent.parent_index(), &node.keys().front());
+            }
+        }, child_node);
     }
 } // namespace btree
 
