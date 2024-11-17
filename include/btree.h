@@ -670,7 +670,9 @@ namespace bt {
             return oss.str();
         }
 
+#ifndef BTREE_TESTING
     protected:
+#endif
         auto is_root(index_type index) const noexcept -> bool {
             return index == root_index_;
         }
@@ -748,7 +750,7 @@ namespace bt {
          */
         auto grow(index_type left_index, index_type right_index, key_type const &pivot_key) -> index_type;
 
-        auto shrink() -> index_type; // TODO
+        auto shrink() -> index_type;
 
         auto create_internal_node(index_type const &parent_index = INVALID_INDEX) -> index_type;
 
@@ -789,7 +791,9 @@ namespace bt {
          */
         auto adjust_parent_key(index_type child_node_index, key_type const *p_correlated_key = nullptr) -> void;
 
+#ifndef BTREE_TESTING
     private:
+#endif
         friend iterator_base_type;
         friend iterator;
         friend const_iterator;
@@ -884,17 +888,17 @@ namespace bt {
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::shrink() -> index_type {
         auto root_node = node(root_index());
         internal_node_type* p_old_root = std::get_if<internal_node_type>(&root_node);
-        assert((p_old_root != nullptr) && "Cannot shrink with leaf root node");
+        // assert((p_old_root != nullptr) && "Cannot shrink with leaf root node");
         if (p_old_root == nullptr)
             throw std::runtime_error("Cannot shrink with leaf root node");
         assert((p_old_root->child_indices().size() == 1) && "shrink(): root node has more or less than 1 child");
         root_index_ = p_old_root->child_indices().front();
-        std::visit([&](auto & node) {
-            node.set_parent_index(INVALID_INDEX);
-        }, node(p_old_root->child_indices().front()));
-        p_old_root->child_indices().clear();
-        p_old_root->keys().clear();
         p_old_root->mark_deleted();
+        p_old_root->child_indices().clear();
+        auto& new_root_node = node(root_index());
+        std::visit([](auto & node) {
+            node.set_parent_index(INVALID_INDEX);
+        }, new_root_node);
         return root_index();
     }
 

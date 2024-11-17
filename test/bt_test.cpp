@@ -14,15 +14,15 @@
 
 namespace bt {
     template<typename IT1, typename IT2>
-    bool equal_sequence(IT1 first1, IT1 last1, IT2 first2, IT2 last2, auto &&proj1, auto &&proj2) {
+    void check_equal(IT1 first1, IT1 last1, IT2 first2, IT2 last2, auto &&proj1, auto &&proj2) {
         auto const &p1 = std::forward<decltype(proj1)>(proj1);
         auto const &p2 = std::forward<decltype(proj2)>(proj2);
         auto it1 = first1, it2 = first2;
         for (; it1 != last1 && it2 != last2; ++it1, ++it2) {
-            if (p1(*it1) != p2(*it2))
-                return false;
+            CHECK_EQ(p1(*it1), p2(*it2));
         }
-        return it1 == last1 && it2 == last2;
+        CHECK_EQ(it1, last1);
+        CHECK_EQ(it2, last2);
     }
 
     class btree_test_class {
@@ -186,9 +186,8 @@ namespace bt {
             tree.merge_leaf(1);
 
             INFO("btree after is: ", static_cast<std::string>(tree));
-            auto res = equal_sequence(tree.begin(), tree.end(), all_keys.begin(), all_keys.end(),
+            check_equal(tree.begin(), tree.end(), all_keys.begin(), all_keys.end(),
                                       [](auto const &e) -> decltype(auto) { return e.first; }, std::identity{});
-            CHECK(res);
             check_sane(tree);
         }
 
@@ -219,9 +218,8 @@ namespace bt {
             INFO("btree before is: ", static_cast<std::string>(tree));
             tree.rebalance_leaf_node(1);
             INFO("btree after is: ", static_cast<std::string>(tree));
-            auto res = equal_sequence(tree.begin(), tree.end(), all_keys.begin(), all_keys.end(),
+            check_equal(tree.begin(), tree.end(), all_keys.begin(), all_keys.end(),
                                       [](auto const &e) -> decltype(auto) { return e.first; }, std::identity{});
-            CHECK(res);
             check_sane(tree);
         }
 
@@ -259,8 +257,8 @@ namespace bt {
                 CHECK_EQ((*it).second, e);
                 tree.erase(it);
                 ref.erase(e);
-                CHECK(equal_sequence(tree.begin(), tree.end(), ref.begin(), ref.end(), [](auto const & e) -> decltype(
-                    auto) { return e.first; }, std::identity{}));
+                check_equal(tree.begin(), tree.end(), ref.begin(), ref.end(), [](auto const & e) -> decltype(
+                    auto) { return e.first; }, std::identity{});
                 check_sane(tree);
             }
         }
@@ -548,9 +546,9 @@ TEST_SUITE("btree") {
                     break;
             }
             std::string tree_after = static_cast<std::string>(tree);
-            CHECK(equal_sequence(tree.begin(), tree.end(), map.begin(), map.end(),
+            check_equal(tree.begin(), tree.end(), map.begin(), map.end(),
                 [](auto const &a) -> decltype(auto) { return a.first; },
-                [](auto const &b) -> decltype(auto) { return b.first; }));
+                [](auto const &b) -> decltype(auto) { return b.first; });
             btree_test_class::check_sane(tree);
         }
     }
