@@ -27,7 +27,7 @@ Run `random_inserts`, which gives an output like below:
 
 It inserts 1 million random pairs of keys of type `TestClass` and values
 of type `std::string` into 
-* a `std::map`
+* a `std::multimap`
 * a `bt::btree` with arbitrary orders for internal nodes and leaf nodes
 * a `bt::btree` with orders best (as big as possible but not bigger) for pages of 4096 bytes size.
 

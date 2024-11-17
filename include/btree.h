@@ -503,7 +503,7 @@ namespace bt {
             return tmp;
         }
 
-        auto operator*() /*-> std::pair<std::reference_wrapper<key_type>, std::reference_wrapper<value_type>>*/ {
+        auto operator*() const /*-> std::pair<std::reference_wrapper<key_type>, std::reference_wrapper<value_type>>*/ {
             auto& node = this->current_leaf();
             assert((this->leaf_index_ < node.keys().size()) && "key index out of bounds");
             assert((this->leaf_index_ < node.values().size()) && "value index out of bounds");

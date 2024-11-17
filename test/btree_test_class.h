@@ -10,11 +10,11 @@
 #include "dyn_array.h"
 
 namespace bt {
-    template<typename IT1, typename IT2>
-    void check_equal(IT1 first1, IT1 last1, IT2 first2, IT2 last2, auto &&proj1 = std::identity{}, auto &&proj2 = std::identity{}) {
+    void check_equal(auto const & r1, auto const & r2, auto &&proj1 = std::identity{}, auto &&proj2 = std::identity{}) {
         auto const &p1 = std::forward<decltype(proj1)>(proj1);
         auto const &p2 = std::forward<decltype(proj2)>(proj2);
-        auto it1 = first1, it2 = first2;
+        auto it1 = r1.begin(), last1 = r1.end();
+        auto it2 = r2.begin(), last2 = r2.end();
         for (; it1 != last1 && it2 != last2; ++it1, ++it2) {
             CHECK_EQ(p1(*it1), p2(*it2));
         }
