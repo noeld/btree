@@ -30,7 +30,18 @@ namespace bt {
             for (auto it = first; it != last; ++it) {
                 auto res = tree.find(*it);
                 CHECK_NE(res, tree.end());
-                CHECK_EQ(*it, (*res).first);
+                if (res != tree.end())
+                    CHECK_EQ(*it, (*res).first);
+            }
+        }
+
+        static void check_find_each(btree_type const & tree, auto first, auto last, auto&& proj) {
+            auto p1 = std::forward<decltype(proj)>(proj);
+            for (auto it = first; it != last; ++it) {
+                auto res = tree.find(p1(*it));
+                CHECK_NE(res, tree.end());
+                if (res != tree.end())
+                    CHECK_EQ(p1(*it), (*res).first);
             }
         }
 

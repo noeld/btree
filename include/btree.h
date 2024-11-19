@@ -818,8 +818,12 @@ namespace bt {
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::erase(iterator it) -> std::size_t {
         leaf_node_type& leaf = it.current_leaf();
         assert((leaf.size() > 0) && "erase(const_iterator it): leaf is empty");
-        leaf.keys().erase(leaf.keys().begin() + it.leaf_index_);
+        auto erase_key_it = leaf.keys().begin() + it.leaf_index_;
+        leaf.keys().erase(erase_key_it);
         leaf.values().erase(leaf.values().begin() + it.leaf_index_);
+        if (erase_key_it == leaf.keys().begin() && !is_root(leaf.index())) {
+            adjust_parent_key(leaf.index(), &leaf.keys().front());
+        }
         if (leaf.size() < traits::template get_min_order<true>()) {
             rebalance_leaf_node(it.leaf_node_index_);
         }
@@ -1151,7 +1155,7 @@ namespace bt {
         if (key_it == internal.keys().end())
             key_it = internal.keys().begin();
         internal.child_indices().erase(index_it);
-            internal.keys().erase(key_it);
+        internal.keys().erase(key_it);
         if (internal.size() < traits::min_internal_order)
             rebalance_internal_node(internal_node_index);
         return true;
@@ -1344,7 +1348,7 @@ namespace bt {
             p_chosen_neighbour->values().erase(p_chosen_neighbour->values().begin() + start_index, p_chosen_neighbour->values().begin() + end_index);
 
             if (is_next)
-                adjust_parent_key(p_chosen_neighbour->index(), &p_leaf->keys().front());
+                adjust_parent_key(p_chosen_neighbour->index(), &p_chosen_neighbour->keys().front());
             else
                 adjust_parent_key(p_leaf->index(), &p_leaf->keys().front());
         }
@@ -1372,7 +1376,7 @@ namespace bt {
             else {
                 // recurse up
                 if (parent.has_parent())
-                    adjust_parent_key(parent.parent_index(), &node.keys().front());
+                    adjust_parent_key(parent.index(), p_correlated_key != nullptr ? p_correlated_key : &node.keys().front());
             }
         }, child_node);
     }
