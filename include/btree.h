@@ -741,6 +741,8 @@ namespace bt {
             return *p_internal;
         }
 
+        auto minimum_key(index_type index) -> key_type const &;
+
         /**
          * @brief Create a new root node
          * @param left_index the index of the left child node (which is the current root)
@@ -822,7 +824,7 @@ namespace bt {
         leaf.keys().erase(erase_key_it);
         leaf.values().erase(leaf.values().begin() + it.leaf_index_);
         if (erase_key_it == leaf.keys().begin() && !is_root(leaf.index())) {
-            adjust_parent_key(leaf.index(), &leaf.keys().front());
+            adjust_parent_key(leaf.index());
         }
         if (leaf.size() < traits::template get_min_order<true>()) {
             rebalance_leaf_node(it.leaf_node_index_);
@@ -864,6 +866,17 @@ namespace bt {
         if (key < *it)
             return end();
         return iterator(*this, index, index_type(std::distance(leaf.keys().begin(), it)));
+    }
+
+    template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
+    auto btree<Key, Value, Index, Internal_order, Leaf_order>::minimum_key(index_type index) -> key_type const & {
+        return std::visit([this](auto const & node) -> decltype(auto) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(node)>, leaf_node_type>) {
+                return node.keys().front();
+            } else {
+                return minimum_key(node.child_indices().front());
+            }
+        }, node(index));
     }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
@@ -1186,11 +1199,11 @@ namespace bt {
         std::move(right_leaf.values().begin(), right_leaf.values().end(), std::back_inserter(left_leaf.values()));
         right_leaf.values().clear();
 
-        erase_internal(right_leaf.parent_index(), right_leaf_index);
         left_leaf.set_next_leaf_index(right_leaf.next_leaf_index());
+        erase_internal(right_leaf.parent_index(), right_leaf_index);
         if (right_leaf.has_next_leaf_index()) {
             auto& next_leaf = leaf_node(right_leaf.next_leaf_index());
-            adjust_parent_key(right_leaf.next_leaf_index(), &next_leaf.keys().front());
+            adjust_parent_key(right_leaf.next_leaf_index());
             next_leaf.set_previous_leaf_index(left_leaf.index());
         }
         right_leaf.mark_deleted();
@@ -1198,8 +1211,7 @@ namespace bt {
     }
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
-    auto btree<Key, Value, Index, Internal_order, Leaf_order>::rebalance_internal_node(
-        index_type internal_node_index) -> bool {
+    auto btree<Key, Value, Index, Internal_order, Leaf_order>::rebalance_internal_node(index_type internal_node_index) -> bool {
         internal_node_type* p_internal = &internal_node(internal_node_index);
         assert((p_internal->size() < traits::min_internal_order) && "rebalance_internal_node: left node has sufficient keys already");
         if (is_root(internal_node_index)) {
@@ -1260,22 +1272,24 @@ namespace bt {
                 p_internal->keys().insert_space(p_internal->keys().begin(), copy_cnt);
                 p_internal->child_indices().insert_space(p_internal->child_indices().begin(), copy_cnt);
             }
-            std::for_each(p_chosen_neighbour->child_indices().begin() + value_start_index, p_chosen_neighbour->child_indices().begin() + value_end_index,
-                [this, internal_node_index](auto index) {
-                    std::visit([this, internal_node_index](auto & node) {
-                        node.set_parent_index(internal_node_index);
-                    }, node(index));
-                }
-                );
+
+
             std::move(p_chosen_neighbour->keys().begin() + key_start_index, p_chosen_neighbour->keys().begin() + key_end_index, key_insertion_it);
             p_chosen_neighbour->keys().erase(p_chosen_neighbour->keys().begin() + key_start_index, p_chosen_neighbour->keys().begin() + key_end_index);
             std::move(p_chosen_neighbour->child_indices().begin() + value_start_index, p_chosen_neighbour->child_indices().begin() + value_end_index, index_insertion_it);
             p_chosen_neighbour->child_indices().erase(p_chosen_neighbour->child_indices().begin() + value_start_index, p_chosen_neighbour->child_indices().begin() + value_end_index);
 
-            if (is_next)
-                adjust_parent_key(p_chosen_neighbour->index()); // TODO: swap parent key for next node and first key in next node 
-            else
-                adjust_parent_key(p_internal->index());
+            std::for_each(index_insertion_it, index_insertion_it + copy_cnt,
+                          [this, internal_node_index](auto index) {
+                              std::visit([this, internal_node_index, index](auto &node) {
+                                  node.set_parent_index(internal_node_index);
+                                  adjust_parent_key(index);
+                              }, node(index));
+                          }
+            );
+
+            adjust_parent_key(p_chosen_neighbour->index());
+            adjust_parent_key(internal_node_index);
         }
         return false;
     }
@@ -1348,9 +1362,9 @@ namespace bt {
             p_chosen_neighbour->values().erase(p_chosen_neighbour->values().begin() + start_index, p_chosen_neighbour->values().begin() + end_index);
 
             if (is_next)
-                adjust_parent_key(p_chosen_neighbour->index(), &p_chosen_neighbour->keys().front());
+                adjust_parent_key(p_chosen_neighbour->index());
             else
-                adjust_parent_key(p_leaf->index(), &p_leaf->keys().front());
+                adjust_parent_key(p_leaf->index());
         }
         return true;
     }
@@ -1366,18 +1380,17 @@ namespace bt {
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::adjust_parent_key(index_type child_node_index, key_type const *p_correlated_key) -> void {
         if (is_root(child_node_index))
             return;
+        if (p_correlated_key == nullptr)
+            p_correlated_key = &minimum_key(child_node_index);
         auto const & child_node = node(child_node_index);
         std::visit([this, p_correlated_key](auto & node) {
             assert((node.keys().size() > 0) && "adjust_parent_key(index_type): Child node has no keys!");
             internal_node_type& parent = internal_node(node.parent_index());
             auto [key_it, child_index_it] = parent.iterators_for_index(node.index());
             if (key_it != parent.keys().end())
-                *key_it = p_correlated_key != nullptr ? *p_correlated_key : node.keys().front();
-            else {
-                // recurse up
-                if (parent.has_parent())
-                    adjust_parent_key(parent.index(), p_correlated_key != nullptr ? p_correlated_key : &node.keys().front());
-            }
+                *key_it = *p_correlated_key;
+            else
+                adjust_parent_key(parent.index(), p_correlated_key);
         }, child_node);
     }
 } // namespace btree

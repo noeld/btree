@@ -188,6 +188,12 @@ TEST_SUITE("btree") {
             {350},
             {{348, 349}, {350, 351, 352}}
             ), expected2, __tree.erase(__tree.find(349)));
+        auto expected3 = {431,/*433,*/434,435,439,444,448,450,451,452,455,457,458,460,465,467,468,469};
+        TREE_CHECK("erase second (433)", create_3level_tree(
+            {450},
+            {{434, 439}, {452, 457, 460, 467}},
+            {{{431, 433}, {434, 435}, {439, 444, 448}}, {{450, 451}, {452, 455}, {457, 458}, {460, 465}, {467, 468, 469}}}
+            ), expected3, __tree.erase(__tree.find(433)));
     }
 
     TEST_CASE_FIXTURE(btree_test_class, "random insert/erase compare to std::multimap") {
