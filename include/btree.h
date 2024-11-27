@@ -1262,7 +1262,7 @@ namespace bt {
             index_type key_start_index = is_next ? 0 : p_chosen_neighbour->size() - copy_cnt;
             index_type value_start_index = is_next ? 0 : p_chosen_neighbour->child_indices().size() - copy_cnt;
             index_type key_end_index = is_next ? copy_cnt : p_chosen_neighbour->size();
-            index_type value_end_index = is_next ? copy_cnt : p_chosen_neighbour->child_indices().size() - copy_cnt;
+            index_type value_end_index = is_next ? copy_cnt : p_chosen_neighbour->child_indices().size();
             auto key_insertion_it = is_next ? p_internal->keys().end() : p_internal->keys().begin();
             auto index_insertion_it = is_next ? p_internal->child_indices().end() : p_internal->child_indices().begin();
             if (is_next) {

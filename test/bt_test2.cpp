@@ -9,6 +9,7 @@
 #include "btree.h"
 #include "dyn_array.h"
 #include "test_class.h"
+#include "create_trees.h"
 #include <functional>
 #include <random>
 #include "btree_test_class.h"
@@ -32,7 +33,7 @@ auto getkey = [](auto const &e)->decltype(auto){return e.first;};
 TEST_SUITE("btree") {
     TEST_CASE_FIXTURE(btree_test_class, "shrink") {
         SUBCASE("shrink leaf throws") {
-            btree_type tree1 = create_1level_tree(
+            btree_type tree1 = creators::create_1level_tree(
                 {1, 2}
             );
             check_sane(tree1);
@@ -40,14 +41,14 @@ TEST_SUITE("btree") {
         }
 
         auto expected2 = {1, 2, 3, 4};
-        TREE_CHECK("shrink 2level", create_2level_tree(
+        TREE_CHECK("shrink 2level", creators::create_2level_tree(
             {5},
             {expected2}
             ), expected2, __tree.shrink());
 
 
         auto expected3 = {1, 2, 3, 4};
-        TREE_CHECK("shrink 3level", create_3level_tree(
+        TREE_CHECK("shrink 3level", creators::create_3level_tree(
             {5},
             {{3}},
             {{{1, 2}, {3, 4}}}
@@ -58,7 +59,7 @@ TEST_SUITE("btree") {
     TEST_CASE_FIXTURE(btree_test_class, "rebalance_internal_node") {
         SUBCASE("rebalance_internal_node 2level") {
             auto expected2 = {1, 2, 3, 4};
-            btree_type tree21 = create_2level_tree(
+            btree_type tree21 = creators::create_2level_tree(
                 {5},
                 {expected2}
             );
@@ -68,13 +69,13 @@ TEST_SUITE("btree") {
         }
 
         auto expected2 = {1, 2, 3, 4};
-        TREE_CHECK("empty root", create_2level_tree(
+        TREE_CHECK("empty root", creators::create_2level_tree(
             {},
             {expected2}
         ), expected2, __tree.rebalance_internal_node(__tree.root_index()));
 
         auto expected3 = {1, 2, 3, 4, 5, 6, 7, 8};
-        TREE_CHECK("3level empty right", create_3level_tree(
+        TREE_CHECK("3level empty right", creators::create_3level_tree(
             {7},
             {{3, 5}, {}},
             {{{1, 2}, {3, 4}, {5, 6}}, {{7, 8}} }
@@ -82,7 +83,7 @@ TEST_SUITE("btree") {
 
 
         auto expected4 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-        TREE_CHECK("3level left", create_3level_tree(
+        TREE_CHECK("3level left", creators::create_3level_tree(
             {5},
             {{3}, {7, 9}},
             {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}, {9, 10}} }
@@ -91,35 +92,35 @@ TEST_SUITE("btree") {
 
     TEST_CASE_FIXTURE(btree_test_class, "merge_internal") {
         auto expected4 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-        TREE_CHECK("3level left", create_3level_tree(
+        TREE_CHECK("3level left", creators::create_3level_tree(
             {5},
             {{3}, {7, 9}},
             {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}, {9, 10}}}
         ), expected4, (__tree.merge_internal(1)));
 
         auto expected5 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-        TREE_CHECK("3level right", create_3level_tree(
+        TREE_CHECK("3level right", creators::create_3level_tree(
             {7},
             {{3, 5}, {9}},
             {{{1, 2}, {3, 4}, {5, 6}},{ {7, 8}, {9, 10}}}
         ), expected5, (__tree.merge_internal(1)));
 
         auto expected6 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-        TREE_CHECK("3level 3 middle right", create_3level_tree(
+        TREE_CHECK("3level 3 middle right", creators::create_3level_tree(
             {7, 13},
             {{3, 5}, {9, 11}, {15}},
             {{{1, 2}, {3, 4}, {5, 6}},{ {7, 8}, {9, 10}, {11, 12}}, {{13, 14}, {15, 16}}}
         ), expected6, (__tree.merge_internal(2)));
 
         auto expected7 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-        TREE_CHECK("3level 3 middle center", create_3level_tree(
+        TREE_CHECK("3level 3 middle center", creators::create_3level_tree(
             {7, 11},
             {{3, 5}, {9}, {13, 15}},
             {{{1, 2}, {3, 4}, {5, 6}},{ {7, 8}, {9, 10}}, {{11, 12}, {13, 14}, {15, 16}}}
         ), expected7, (__tree.merge_internal(2)));
 
         auto expected8 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-        TREE_CHECK("3level 3 middle left", create_3level_tree(
+        TREE_CHECK("3level 3 middle left", creators::create_3level_tree(
             {5, 11},
             {{3}, {7, 9}, {13, 15}},
             {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}, {9, 10}}, {{11, 12}, {13, 14}, {15, 16}}}
@@ -127,25 +128,25 @@ TEST_SUITE("btree") {
     }
     TEST_CASE_FIXTURE(btree_test_class, "merge_leaf") {
         auto expected1 = {1, 2, 3, 4, 5};
-        TREE_CHECK("2level right", create_2level_tree(
+        TREE_CHECK("2level right", creators::create_2level_tree(
             {3, 5},
             {{1, 2}, {3, 4}, {5}}
             ), expected1, __tree.merge_leaf(2));
 
         auto expected2 = {1, 2, 3, 4, 5};
-        TREE_CHECK("2level center",  create_2level_tree(
+        TREE_CHECK("2level center",  creators::create_2level_tree(
             {3, 4},
             {{1, 2}, {3}, {4, 5}}
             ), expected2, __tree.merge_leaf(2));
 
         auto expected3 = {1, 2, 3, 4, 5};
-        TREE_CHECK("2level left", create_2level_tree(
+        TREE_CHECK("2level left", creators::create_2level_tree(
             {2, 4},
             {{1 }, {2, 3}, {4, 5}}
             ), expected3, __tree.merge_leaf(1));
 
         auto expected4 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17/*, 18*/};
-        TREE_CHECK("3level right end", create_3level_tree(
+        TREE_CHECK("3level right end", creators::create_3level_tree(
             {7, 13},
             {{3, 5}, {9, 11}, {15, 17}},
             {{{1, 2}, {3, 4}, {5, 6}}, {{7, 8}, {9, 10}, {11, 12}}, {{13, 14}, {15, 16}, {17/*, 18*/}}}
@@ -153,7 +154,7 @@ TEST_SUITE("btree") {
 
         {
             auto expected = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, /*14,*/ 15, 16, 17, 18};
-            TREE_CHECK("3level left", create_3level_tree(
+            TREE_CHECK("3level left", creators::create_3level_tree(
                 {7, 13},
                 {{3, 5}, {9, 11}, {15, 17}},
                 {{{1, 2}, {3, 4}, {5, 6}}, {{7, 8}, {9, 10}, {11, 12}}, {{13/*, 14*/}, {15, 16}, {17, 18}}}
@@ -161,7 +162,7 @@ TEST_SUITE("btree") {
         }
         {
             auto expected = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, /*12,*/ 13, 14, 15, 16, 17, 18};
-            TREE_CHECK("3level right middle", create_3level_tree(
+            TREE_CHECK("3level right middle", creators::create_3level_tree(
                 {7, 13},
                 {{3, 5}, {9, 11}, {15, 17}},
                 {{{1, 2}, {3, 4}, {5, 6}}, {{7, 8}, {9, 10}, {11/*, 12*/}}, {{13, 14}, {15, 16}, {17, 18}}}
@@ -169,7 +170,7 @@ TEST_SUITE("btree") {
         }
         {
             auto expected = {1, 2, 3, 4, 5, 6, /*7, */8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18};
-            TREE_CHECK("3level right first leaf", create_3level_tree(
+            TREE_CHECK("3level right first leaf", creators::create_3level_tree(
                 {8, 13},
                 {{3, 5}, {9, 11}, {15, 17}},
                 {{{1, 2}, {3, 4}, {5, 6}}, {{/*7,*/ 8}, {9, 10}, {11, 12}}, {{13, 14}, {15, 16}, {17, 18}}}
@@ -178,22 +179,28 @@ TEST_SUITE("btree") {
     }
     TEST_CASE_FIXTURE(btree_test_class, "erase") {
         auto expected1 = {/*18,*/24,25,26,30,31,32,33,34,37,39,40,41,42,45,46,47,49,52,53,54,58};
-        TREE_CHECK("erase first (18)", create_3level_tree(
+        TREE_CHECK("erase first (18)", creators::create_3level_tree(
             {32, 42},
             {{25, 30}, {34, 39}, {47, 52, 54}},
             {{{18, 24}, {25, 26}, {30, 31}}, {{32, 33}, {34, 37}, {39, 40, 41}}, {{42, 45, 46}, {47, 49}, {52, 53}, {54, 58}}}
             ), expected1, __tree.erase(__tree.begin()));
         auto expected2 = {348, /*349, */ 350, 351, 352};
-        TREE_CHECK("erase second (349)", create_2level_tree(
+        TREE_CHECK("erase second (349)", creators::create_2level_tree(
             {350},
             {{348, 349}, {350, 351, 352}}
             ), expected2, __tree.erase(__tree.find(349)));
         auto expected3 = {431,/*433,*/434,435,439,444,448,450,451,452,455,457,458,460,465,467,468,469};
-        TREE_CHECK("erase second (433)", create_3level_tree(
+        TREE_CHECK("erase second (433)", creators::create_3level_tree(
             {450},
             {{434, 439}, {452, 457, 460, 467}},
             {{{431, 433}, {434, 435}, {439, 444, 448}}, {{450, 451}, {452, 455}, {457, 458}, {460, 465}, {467, 468, 469}}}
             ), expected3, __tree.erase(__tree.find(433)));
+        auto expected4 = {366,374,424,430,433,434,435,/*436,*/440,450,460,462,463,465,470,472};
+        TREE_CHECK("erase with internal_merge previous", creators::create_3level_tree(
+            {440},
+            {{424, 433, 435}, {460, 463}},
+            {{{366, 374}, {424, 430}, {433, 434}, {435, 436}}, {{440, 450}, {460, 462}, {463, 465, 470, 472}}}
+            ), expected4, __tree.erase(__tree.find(436)) );
     }
 
     TEST_CASE_FIXTURE(btree_test_class, "random insert/erase compare to std::multimap") {
