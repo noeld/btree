@@ -1287,9 +1287,11 @@ namespace bt {
                               }, node(index));
                           }
             );
+            if (!is_next)
+                adjust_parent_key(p_internal->child_indices().at(copy_cnt));
 
             adjust_parent_key(p_chosen_neighbour->index());
-            adjust_parent_key(internal_node_index);
+            // adjust_parent_key(internal_node_index);
         }
         return false;
     }

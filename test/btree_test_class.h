@@ -41,8 +41,21 @@ namespace bt {
         static bool check_sane(Btree_type const & tree, typename Btree_type::internal_node_type const &node) {
             check_sane<Btree_type, typename Btree_type::internal_node_type>(tree, node);
             CHECK_EQ(node.child_indices().size(), node.keys().size() + 1);
-            for(auto index : node.child_indices())
+            for (btree_type::index_type k = 0; k < node.keys().size(); ++k) {
+                auto key = node.keys()[k];
+                auto last_key = std::visit([](auto const & child_node) {
+                    return child_node.keys().back();
+                } , tree.node(node.child_indices()[k]));
+                CHECK_LE(last_key, key);
+                auto first_key = std::visit([](auto const &child_node) {
+                    return child_node.keys().front();
+                }, tree.node(node.child_indices()[k + 1]));
+                // CHECK_EQ(first_key, key);
+                CHECK_GE(first_key, key);
+            }
+            for(auto index : node.child_indices()) {
                 check_sane(tree, tree.node(index));
+            }
             return true;
         }
         template<typename Btree_type>
