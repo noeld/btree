@@ -22,7 +22,8 @@ auto getkey = [](auto const &e)->decltype(auto){return e.first;};
 #define TREE_CHECK(name, tree, expected, action) \
     DOCTEST_SUBCASE(name) {\
         auto __tree = tree;\
-        CAPTURE(__tree);\
+        std::string __tree_before{tree};\
+        CAPTURE(__tree_before);\
         action; \
         check_sane(__tree); \
         check_equal(__tree, expected, getkey, std::identity{}); \
@@ -54,6 +55,11 @@ TEST_SUITE("btree") {
             {{{1, 2}, {3, 4}}}
             ), expected3, __tree.shrink());
 
+        auto expected4 = {/*1,*/ 2, 3, 4};
+        TREE_CHECK("erase, shrink", creators::create_2level_tree(
+            {3},
+            {{1, 2}, {3, 4}}
+            ), expected4, __tree.erase(__tree.find(1)));
     }
 
     TEST_CASE_FIXTURE(btree_test_class, "rebalance_internal_node") {
@@ -177,6 +183,18 @@ TEST_SUITE("btree") {
             ), expected, (__tree.merge_leaf(6)));
         }
     }
+    TEST_CASE_FIXTURE(btree_test_class, "insert") {
+        auto expected1 = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};
+        TREE_CHECK("insert + split", creators::create_2level_tree(
+              {5, 10, 13, 16},
+              { {1, 2, 3, 4}, {5, 6, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17}}
+            ), expected1, __tree.insert(7, 7));
+        auto expected2 = {1,2,3,4,5,6,7,8,9,10,11,12,13,14};
+        TREE_CHECK("insert + split internal", creators::create_2level_tree(
+                  {3, 5, 7, 10},
+          {{1, 2}, {3, 4}, {5, 6}, {7, 8, 9}, {10, 11, 13, 14}}
+          ), expected2, __tree.insert(12, 12));
+    }
     TEST_CASE_FIXTURE(btree_test_class, "erase") {
         auto expected1 = {/*18,*/24,25,26,30,31,32,33,34,37,39,40,41,42,45,46,47,49,52,53,54,58};
         TREE_CHECK("erase first (18)", creators::create_3level_tree(
@@ -243,7 +261,7 @@ TEST_SUITE("btree") {
             return dist(rnd);
         };
         auto random_action = [&random_nr](unsigned ipcnt = 50) {
-            static constexpr std::array<char, 3> actions = {'i', 'e'};
+            static constexpr std::array<char, 2> actions = {'i', 'e'};
             auto nr = random_nr(0, 99);
             int idx = nr < ipcnt;
             return actions[idx];
@@ -254,33 +272,37 @@ TEST_SUITE("btree") {
         static constexpr std::pair<size_t, unsigned> insert_pcnt[] = {{size_t(0.33*TESTCNT), 75}, {size_t(0.66 * TESTCNT), 50}, {size_t(0.95 * TESTCNT), 25}, {TESTCNT, 0}};
         auto find_pcnt = [&](unsigned i) {
             auto it = std::begin(insert_pcnt);
-            while(it->first < i && it != std::end(insert_pcnt)) ++it;
+            while(i >= it->first && it != std::end(insert_pcnt)) ++it;
             return it->second;
         };
         unsigned erase_cnt = 0;
         unsigned insert_cnt = 0;
-        for (unsigned i = 0; i < 1000; ++i) {
+        for (unsigned i = 0; i < 100'000; ++i) {
+            CAPTURE(i);
             std::string tree_before = static_cast<std::string>(tree);
+            CAPTURE(tree_before);
             auto ipcnt = find_pcnt(i);
             auto action = random_action(ipcnt);
+            auto new_nr = random_nr(1, 100'000);
+            auto erase_offset = random_nr(0, (unsigned)map.size() - 1);
             if (map.empty())
                 action = 'i';
             switch (action) {
                 case 'i':
                     ++insert_cnt;
-                    last_action = std::format("insert({})", i);
-                    insert(i);
+                    last_action = std::format("insert({})", new_nr);
+                    insert(new_nr);
                     break;
                 case 'e':
                     ++erase_cnt;
-                    auto adv = random_nr(0, (unsigned)map.size() - 1);
                     auto it = map.begin();
-                    std::advance(it, adv);
-                    last_action = std::format("erase({}) -> {}", adv, it->first);
-                    erase(adv);
+                    std::advance(it, erase_offset);
+                    last_action = std::format("erase({}) -> {}", erase_offset, it->first);
+                    erase(erase_offset);
                     break;
             }
             std::string tree_after = static_cast<std::string>(tree);
+            CAPTURE(last_action);
             check_sane(tree);
             check_equal(tree, map, getkey, [](auto const & e) -> decltype(auto) { return e.first; });
             check_find_each(tree, map.begin(), map.end(), [](auto const & e) -> decltype(auto) { return e.first; });

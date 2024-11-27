@@ -21,14 +21,14 @@ add_executable(bt_test2 bt_test2.cpp
         btree_test_class.h
         create_trees.h)
 target_link_libraries(bt_test2 PRIVATE doctest::doctest btree)
-target_compile_options(bt_test2 PRIVATE -Wall -Wconversion -Wpedantic -Werror -DBTREE_TESTING)
+target_compile_options(bt_test2 PRIVATE -Wall -Wconversion -Wpedantic -Werror -Wshadow -DBTREE_TESTING)
 
 
 add_test(NAME da_test COMMAND da_test)
 add_test(NAME bt_test COMMAND bt_test)
 add_test(NAME bt_test2 COMMAND bt_test2)
 
-add_executable(create_trees create_trees.cpp btree_test_class.h
+add_executable(create_trees EXCLUDE_FROM_ALL create_trees.cpp btree_test_class.h
         create_trees.h)
 target_link_libraries(create_trees PRIVATE doctest::doctest btree)
 target_compile_options(create_trees PRIVATE -Wall -Wconversion -Wpedantic -Werror -DBTREE_TESTING)

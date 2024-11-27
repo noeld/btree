@@ -122,7 +122,7 @@ namespace bt {
 
         [[nodiscard]] auto iterators_for_index(index_type index)
             -> std::pair<typename base_type::key_store_type::iterator, typename index_store_type::iterator> {
-            auto index_it = std::ranges::lower_bound(child_indices(), index);
+            auto index_it = std::ranges::find(child_indices(), index);
             assert((index_it != child_indices().end() && *index_it == index) && "index is no child of this node");
             auto key_it = index_it == child_indices().begin()
                               ? this->keys().end()
@@ -132,7 +132,7 @@ namespace bt {
 
         [[nodiscard]] auto iterators_for_index(index_type index) const
             -> std::pair<typename base_type::key_store_type::const_iterator, typename index_store_type::const_iterator> {
-            auto index_it = std::ranges::lower_bound(child_indices(), index);
+            auto index_it = std::ranges::find(child_indices(), index);
             assert((index_it != child_indices().end() && *index_it == index) && "index is no child of this node");
             auto key_it = index_it == child_indices().begin()
                               ? this->keys().end()
@@ -145,6 +145,11 @@ namespace bt {
             auto prev_index = index_it != child_indices().begin() ? *(index_it - 1): INVALID_INDEX;
             auto next_index = index_it + 1 != child_indices().end() ? *(index_it + 1) : INVALID_INDEX;
             return {prev_index, next_index};
+        }
+
+        auto mark_deleted() {
+            base_type::mark_deleted();
+            child_indices().clear();
         }
 
         // auto accept(btree_type& tree, auto& visitor) -> void {
@@ -226,6 +231,13 @@ namespace bt {
 
         void set_next_leaf_index(const index_type &next_leaf_index) {
             next_leaf_index_ = next_leaf_index;
+        }
+
+        auto mark_deleted() {
+            base_type::mark_deleted();
+            values().clear();
+            set_previous_leaf_index(INVALID_INDEX);
+            set_next_leaf_index(INVALID_INDEX);
         }
 
     private:
@@ -903,7 +915,7 @@ namespace bt {
 
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::shrink() -> index_type {
-        auto root_node = node(root_index());
+        auto& root_node = node(root_index());
         internal_node_type* p_old_root = std::get_if<internal_node_type>(&root_node);
         // assert((p_old_root != nullptr) && "Cannot shrink with leaf root node");
         if (p_old_root == nullptr)
@@ -911,7 +923,6 @@ namespace bt {
         assert((p_old_root->child_indices().size() == 1) && "shrink(): root node has more or less than 1 child");
         root_index_ = p_old_root->child_indices().front();
         p_old_root->mark_deleted();
-        p_old_root->child_indices().clear();
         auto& new_root_node = node(root_index());
         std::visit([](auto & node) {
             node.set_parent_index(INVALID_INDEX);
@@ -1013,25 +1024,46 @@ namespace bt {
         auto pivot_key_it = std::midpoint(p_internal->keys().begin(), p_internal->keys().end());
         auto pivot_index = std::distance(p_internal->keys().begin(), pivot_key_it);
 
+        auto key_insert_it = std::ranges::upper_bound(p_internal->keys(), key);
+        auto key_insert_index = std::distance(p_internal->keys().begin(), key_insert_it);
+
         // save pivot
         key_type pivot_key = *pivot_key_it;
+        bool insert_new_key_left = key_insert_index < pivot_index;
+        bool insert_new_key_right = pivot_index < key_insert_index;
+        // TODO: first find where to insert new key, then decide whether to split
+        //       on the pivot key or after
+        internal_node_type* p_insert_internal = insert_new_key_left ? p_internal : &new_internal;
 
         // move keys/child_indices which are right from pivot into new node
         auto first_key_it = pivot_key_it;
-        std::ranges::advance(first_key_it, 1, p_internal->keys().end());
+        auto first_child_indices_it = p_internal->child_indices().begin() + pivot_index;
+
+        auto advance = insert_new_key_left ? 0 : 1;
+        std::ranges::advance(first_key_it, advance, p_internal->keys().end());
         std::move(first_key_it, p_internal->keys().end(), std::back_inserter(new_internal.keys()));
 
-        auto first_child_indices_it = p_internal->child_indices().begin() + pivot_index;
-        std::ranges::advance(first_child_indices_it, 1, p_internal->child_indices().end());
+        std::ranges::advance(first_child_indices_it, advance, p_internal->child_indices().end());
         std::move(first_child_indices_it, p_internal->child_indices().end(), std::back_inserter(new_internal.child_indices()));
 
         // shrink left node
-        p_internal->keys().resize(pivot_index);
-        p_internal->child_indices().resize(pivot_index + 1);
+        // p_internal->keys().resize(pivot_index + advance - 1);
+        auto remove_from = first_key_it;
+        std::ranges::advance(remove_from, -1, p_internal->keys().begin());
+        p_internal->keys().erase(remove_from, p_internal->keys().end());
+        // p_internal->child_indices().resize(pivot_index + advance);
+        p_internal->child_indices().erase(first_child_indices_it, p_internal->child_indices().end());
 
-        // insert key and value into one of the internal nodes
-        internal_node_type* p_insert_internal = (key < pivot_key) ? p_internal : &new_internal;
-        insert_internal(p_insert_internal->index(), key, child_index, false);
+        if (!(insert_new_key_left || insert_new_key_right)) {
+            // new key is pivot key
+            pivot_key = key;
+            new_internal.child_indices().insert(new_internal.child_indices().begin(), child_index);
+        }
+
+        if (insert_new_key_left || insert_new_key_right) {
+            // insert key and value into one of the internal nodes
+            insert_internal(p_insert_internal->index(), key, child_index, false);
+        }
 
         // adjust parent index for all children of the new right node
         for (auto index : new_internal.child_indices())
@@ -1039,7 +1071,9 @@ namespace bt {
                node.set_parent_index(new_internal_index);
             }, node(index));
 
+        pivot_key = minimum_key(new_internal_index);
         if (is_root(*p_internal)) {
+            // pivot_key = minimum_key(new_internal_index);
             grow(node_index, new_internal_index, pivot_key);
         } else {
             insert_internal(p_internal->parent_index(), pivot_key, new_internal_index, true);
@@ -1057,6 +1091,8 @@ namespace bt {
             auto insert_pos_index = std::distance(node.keys().begin(), insert_pos_it);
             node.keys().insert(insert_pos_it, key);
             node.child_indices().insert(node.child_indices().begin() + insert_pos_index + 1, child_index);
+            if (insert_pos_index == index_type(0))
+                adjust_parent_key(node_index);
         } else {
             assert((allow_recurse == true) && "already recursed into insert_internal");
             insert_split_internal(node_index, key, child_index);
@@ -1151,9 +1187,6 @@ namespace bt {
                 node.set_parent_index(left_node_index);
             }, node(i));
         }
-        // std::move(p_right->child_indices().begin(), p_right->child_indices().end(), std::back_inserter(p_left->child_indices()));
-        p_right->child_indices().clear();
-
         erase_internal(p_right->parent_index(), right_index);
         p_right->mark_deleted();
         return true;

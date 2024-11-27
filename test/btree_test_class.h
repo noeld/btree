@@ -100,7 +100,30 @@ namespace bt {
 
         template<typename Btree_type>
         static bool check_sane(Btree_type const & tree) {
-            return check_sane(tree, tree.node(tree.root_index()));
+            CAPTURE(tree);
+            bool nodes_check = check_sane(tree, tree.node(tree.root_index()));
+            bool index_checks = true;
+            std::map<typename Btree_type::index_type, typename Btree_type::index_type> tree_child_indices;
+            for (auto const & e : tree.nodes_) {
+                auto p_internal = std::get_if<typename Btree_type::internal_node_type>(&e);
+                if (p_internal != nullptr) {
+                    CAPTURE(p_internal->index());
+                    for (auto idx : p_internal->child_indices()) {
+                        CAPTURE(idx);
+                        if (!tree.is_root(p_internal->index()) && !p_internal->has_parent()) {
+                            // node is deleted
+                            CHECK_EQ(p_internal->keys().size(), 0);
+                            CHECK_EQ(p_internal->child_indices().size(), 0);
+                            continue;
+                        }
+                        auto contained= tree_child_indices.contains(idx);
+                        CHECK_FALSE(contained);
+                        tree_child_indices.insert({idx, p_internal->index()});
+                        index_checks = index_checks && !contained;
+                    }
+                }
+            }
+            return index_checks && nodes_check;
         }
 
     };
