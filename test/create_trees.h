@@ -98,53 +98,6 @@ namespace bt {
             return tree;
         }
 
-        static constexpr btree_type create_nlevel_tree(std::ranges::range auto && leaf_keys, std::ranges::range auto && ... internal_keys) {
-            std::vector<btree_type::internal_node_type> internals;
-
-            btree_type::index_type index = 0;
-            btree_type::index_type parent_index = btree_type::INVALID_INDEX;
-            [[maybe_unused]] auto expand_internals = [&index, &parent_index, &internals]<typename Range>(Range && r, auto&& self) -> void {
-                if constexpr (std::is_convertible_v<std::invoke_result_t<decltype(std::begin<Range>), Range>, typename btree_type::key_type>) {
-                    internals.emplace_back(index, parent_index, std::forward<Range>(r));
-                    internals[parent_index].child_indices().emplace_back(index);
-                    ++index;
-                } else {
-                    for (auto && e: r)
-                        self(std::forward<decltype(e)>(e), self);
-                    parent_index = parent_index == btree_type::INVALID_INDEX ? 0 : parent_index + 1;
-                }
-            };
-            (expand_internals(std::forward<decltype(internal_keys)>(internal_keys), expand_internals), ...);
-
-            std::vector<btree_type::leaf_node_type> leaves;
-            auto expand_leaves = [&index, &parent_index, &internals, &leaves]<typename Range>(Range &&r, auto && self) -> void {
-                if constexpr (range_of_ranges<Range>) {
-                    for (auto &&e: r)
-                        self(std::forward<decltype(e)>(e), self);
-                    parent_index = parent_index == btree_type::INVALID_INDEX ? 0 : parent_index + 1;
-                } else
-                // if constexpr (std::ranges::range<Range> && std::is_convertible_v<decltype(r.begin()), typename btree_type::key_type>)
-                    {
-                    leaves.emplace_back(index, parent_index, index - 1, index + 1, r, std::forward<Range>(r));
-                    internals[parent_index].child_indices().emplace_back(index);
-                    ++index;
-                }
-            };
-            expand_leaves(std::forward<decltype(leaf_keys)>(leaf_keys), expand_leaves);
-
-            leaves.front().set_previous_leaf_index(btree_type::INVALID_INDEX);
-            leaves.back().set_next_leaf_index(btree_type::INVALID_INDEX);
-
-            btree_type tree;
-            tree.nodes_.clear();
-            for(auto && e: internals)
-                tree.nodes_.emplace_back(std::move(e));
-            for(auto && e: leaves)
-                tree.nodes_.emplace_back(std::move(e));
-
-            return tree;
-        }
-
         static constexpr btree_type test_tree1() {
             return create_3level_tree(
             {34, 40},

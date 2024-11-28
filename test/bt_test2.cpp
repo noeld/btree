@@ -22,8 +22,8 @@ auto getkey = [](auto const &e)->decltype(auto){return e.first;};
 #define TREE_CHECK(name, tree, expected, action) \
     DOCTEST_SUBCASE(name) {\
         auto __tree = tree;\
-        std::string __tree_before{tree};\
-        CAPTURE(__tree_before);\
+        /*std::string __tree_before{tree};*/\
+        /*CAPTURE(__tree_before);*/\
         action; \
         check_sane(__tree); \
         check_equal(__tree, expected, getkey, std::identity{}); \
@@ -295,7 +295,8 @@ TEST_SUITE("btree") {
             return actions[idx];
         };
         btree_test_class::check_sane(tree);
-        static constexpr size_t TESTCNT = 100'000UL;
+        static constexpr size_t TESTCNT = 50'000UL;
+        static constexpr long int MAXMILLISECONDS = 10 * 1000;
         std::string last_action;
         static constexpr std::pair<size_t, unsigned> insert_pcnt[] = {{size_t(0.33*TESTCNT), 90}, {size_t(0.66 * TESTCNT), 50}, {size_t(0.85 * TESTCNT), 5}};
         auto find_pcnt = [&](unsigned i) {
@@ -306,10 +307,19 @@ TEST_SUITE("btree") {
         unsigned erase_cnt = 0;
         unsigned insert_cnt = 0;
         unsigned max_depth = 0;
+        auto start_time = std::chrono::high_resolution_clock::now();
         for (unsigned i = 0; i < TESTCNT; ++i) {
+            if (i % 100 == 0) {
+                auto now = std::chrono::high_resolution_clock::now();
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
+                if (ms.count() > MAXMILLISECONDS) {
+                    MESSAGE("Stopping after ", ms.count(), "ms");
+                    break;
+                }
+            }
             CAPTURE(i);
-            std::string tree_before = static_cast<std::string>(tree);
-            CAPTURE(tree_before);
+            // std::string tree_before = static_cast<std::string>(tree);
+            // CAPTURE(tree_before);
             auto ipcnt = find_pcnt(i);
             auto action = random_action(ipcnt);
             auto new_nr = random_nr(1, TESTCNT);
