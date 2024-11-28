@@ -1055,21 +1055,26 @@ namespace bt {
         p_internal->child_indices().erase(first_child_indices_it, p_internal->child_indices().end());
 
         if (!(insert_new_key_left || insert_new_key_right)) {
-            // new key is pivot key
+            // new key == pivot key
             pivot_key = key;
+            index_type last_first_child_index = new_internal.child_indices().front();
             new_internal.child_indices().insert(new_internal.child_indices().begin(), child_index);
+            std::visit([&](auto &node) {
+               node.set_parent_index(new_internal_index);
+            }, node(child_index));
+            auto&& min_key = minimum_key(last_first_child_index);
+            new_internal.keys().insert(new_internal.keys().begin(), std::move(min_key));
         }
-
-        if (insert_new_key_left || insert_new_key_right) {
-            // insert key and value into one of the internal nodes
-            insert_internal(p_insert_internal->index(), key, child_index, false);
-        }
-
         // adjust parent index for all children of the new right node
         for (auto index : new_internal.child_indices())
             std::visit([&](auto &node) {
                node.set_parent_index(new_internal_index);
             }, node(index));
+
+        if (insert_new_key_left || insert_new_key_right) {
+            // insert key and value into one of the internal nodes
+            insert_internal(p_insert_internal->index(), key, child_index, false);
+        }
 
         pivot_key = minimum_key(new_internal_index);
         if (is_root(*p_internal)) {
@@ -1085,14 +1090,17 @@ namespace bt {
     template<typename Key, typename Value, typename Index, size_t Internal_order, size_t Leaf_order>
     auto btree<Key, Value, Index, Internal_order, Leaf_order>::insert_internal(index_type node_index, const key_type &key,
                                                           index_type child_index, bool allow_recurse) -> bool {
-        internal_node_type& node = internal_node(node_index);
-        if (node.size() < node.order()) {
-            auto insert_pos_it = std::upper_bound(node.keys().begin(), node.keys().end(), key);
-            auto insert_pos_index = std::distance(node.keys().begin(), insert_pos_it);
-            node.keys().insert(insert_pos_it, key);
-            node.child_indices().insert(node.child_indices().begin() + insert_pos_index + 1, child_index);
-            if (insert_pos_index == index_type(0))
-                adjust_parent_key(node_index);
+        internal_node_type& internal = internal_node(node_index);
+        if (internal.size() < internal.order()) {
+            auto insert_pos_it = std::upper_bound(internal.keys().begin(), internal.keys().end(), key);
+            auto insert_pos_index = std::distance(internal.keys().begin(), insert_pos_it);
+            internal.keys().insert(insert_pos_it, key);
+            internal.child_indices().insert(internal.child_indices().begin() + insert_pos_index + 1, child_index);
+            std::visit([node_index](auto & child_node) {
+                child_node.set_parent_index(node_index);
+            }, node(child_index));
+            // if (insert_pos_index == index_type(0))
+            //     adjust_parent_key(node_index);
         } else {
             assert((allow_recurse == true) && "already recursed into insert_internal");
             insert_split_internal(node_index, key, child_index);
