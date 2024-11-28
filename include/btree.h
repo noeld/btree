@@ -635,6 +635,10 @@ namespace bt {
 
         auto contains(key_type const &key) const -> bool { return find(key) != end(); }
 
+        index_type depth() const {
+            return node_depth(first_leaf_index());
+        }
+
         // TODO: implement
         auto get(const key_type &key) const -> const value_type&;
         auto get_or(const key_type &key, const value_type &default_value = value_type()) -> value_type const&;

@@ -291,13 +291,13 @@ TEST_SUITE("btree") {
         auto random_action = [&random_nr](unsigned ipcnt = 50) {
             static constexpr std::array<char, 2> actions = {'i', 'e'};
             auto nr = random_nr(0, 99);
-            int idx = nr < ipcnt;
+            int idx = nr > ipcnt;
             return actions[idx];
         };
         btree_test_class::check_sane(tree);
-        static constexpr size_t TESTCNT = 1000UL;
+        static constexpr size_t TESTCNT = 100'000UL;
         std::string last_action;
-        static constexpr std::pair<size_t, unsigned> insert_pcnt[] = {{size_t(0.33*TESTCNT), 75}, {size_t(0.66 * TESTCNT), 50}, {size_t(0.95 * TESTCNT), 25}, {TESTCNT, 0}};
+        static constexpr std::pair<size_t, unsigned> insert_pcnt[] = {{size_t(0.33*TESTCNT), 90}, {size_t(0.66 * TESTCNT), 50}, {size_t(0.85 * TESTCNT), 5}};
         auto find_pcnt = [&](unsigned i) {
             auto it = std::begin(insert_pcnt);
             while(i >= it->first && it != std::end(insert_pcnt)) ++it;
@@ -305,13 +305,14 @@ TEST_SUITE("btree") {
         };
         unsigned erase_cnt = 0;
         unsigned insert_cnt = 0;
-        for (unsigned i = 0; i < 100'000; ++i) {
+        unsigned max_depth = 0;
+        for (unsigned i = 0; i < TESTCNT; ++i) {
             CAPTURE(i);
             std::string tree_before = static_cast<std::string>(tree);
             CAPTURE(tree_before);
             auto ipcnt = find_pcnt(i);
             auto action = random_action(ipcnt);
-            auto new_nr = random_nr(1, 100'000);
+            auto new_nr = random_nr(1, TESTCNT);
             auto erase_offset = random_nr(0, (unsigned)map.size() - 1);
             if (map.empty())
                 action = 'i';
@@ -329,11 +330,14 @@ TEST_SUITE("btree") {
                     erase(erase_offset);
                     break;
             }
+            max_depth = std::max(max_depth, tree.depth());
+            CAPTURE(max_depth);
             std::string tree_after = static_cast<std::string>(tree);
             CAPTURE(last_action);
             check_sane(tree);
             check_equal(tree, map, getkey, [](auto const & e) -> decltype(auto) { return e.first; });
             check_find_each(tree, map.begin(), map.end(), [](auto const & e) -> decltype(auto) { return e.first; });
         }
+        MESSAGE("max_depth = ", max_depth, " insert_cnt = ", insert_cnt, " erase_cnt = ", erase_cnt);
     }
 }
